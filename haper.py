@@ -286,15 +286,8 @@ class CommandExecutor:
     def start_working(self, order_info):
         self.logger.info(f'Started working on order: {order_info}')
         # 发送消息给客户，通知客户开始制作
-        work_group = self.wx.CreateGroup([order_info.worker, order_info.order_id], f'【{order_info.order_id}】定制服务群')
-        work_group.SendKeys(f'{order_info.info}')
-        work_group.SendKeys('{Enter}')
-        work_group.SendKeys('亲爱的客户，您好，感谢您对我们家的信任在我们家下单，我是店铺负责人，已经帮您分配好执笔老师，简历定制包含个人隐私，在未经本人同意的情况下，我们是绝对禁止外发出去，您可放心。')
-        work_group.SendKeys('{Enter}')
-        work_group.SendKeys('【客户须知】\n1.简历一般初稿时间在客户提供了相关资料信息后6-24小时左右，如需加急得先联系平台在线客服；\n2.模板确认好以后，中途不可更换；\n3.简历在定稿以后会发word和pdf 2个电子版文件，pdf版是可以直接微信发给对方HR或者邮箱上传，word版是后期可以再修改， 亲要妥善存储；\n4.定稿后 30 天内免费售后噢（不包括更换模板、求职意向变动带来的内容改动）；\n5.为了保障服务质量，我们采用建群方式沟通，亲不要私加执笔老师，有任何问题可以在本群直接沟通即可；\n6.切记不要跟执笔老师私下交易，私下交易，出现任何问题，本店概不负责。')
-        work_group.SendKeys('{Enter}')
-        work_group.SendKeys('【注意】如有老师私加好友或者服务态度问题，亲可以第一时间向我反馈，我了解情况后会第一时间为您解决问题。请勿添加写手的私人微信！若写手私自添加您的微信，欢迎举报，核实属实，简历制作免费，感谢信任和支持!')
-        work_group.SendKeys('{Enter}')
+        self.wx.CreateGroup([order_info.worker, order_info.order_id], f'【{order_info.order_id}】定制服务群')
+
         order_info.set_work_group_created()
 
 # 使用示例

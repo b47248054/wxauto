@@ -567,15 +567,20 @@ class WeChat(WeChatBase):
             return
         finally:
             uia.SetGlobalSearchTimeout(10)
-        roominfoWnd = self.UiaAPI.WindowControl(ClassName='SessionChatRoomDetailWnd', searchDepth=1)
+        roominfoWnd = self.UiaAPI.PaneControl(ClassName='SessionChatRoomDetailWnd', searchDepth=1)
         # 设置群聊名称
         roominfoWnd.TextControl(Name='群聊名称').GetNextSiblingControl().Click(simulateMove=False)
         roominfoWnd.SendKeys(groupname)
         roominfoWnd.SendKeys('{Enter}')
         roominfoWnd.SendKeys('{Esc}')
-        self.ChatBox.EditControl().SendKeys(groupname)
-        self.ChatBox.EditControl().SendKeys('{Enter}')
-        return self.ChatBox.EditControl()
+
+        roominfoWnd.SendKeys('亲爱的客户，您好，感谢您对我们家的信任在我们家下单，我是店铺负责人，已经帮您分配好执笔老师，简历定制包含个人隐私，在未经本人同意的情况下，我们是绝对禁止外发出去，您可放心。')
+        roominfoWnd.SendKeys('{Enter}')
+        roominfoWnd.SendKeys('【客户须知】\n1.简历一般初稿时间在客户提供了相关资料信息后6-24小时左右，如需加急得先联系平台在线客服；\n2.模板确认好以后，中途不可更换；\n3.简历在定稿以后会发word和pdf 2个电子版文件，pdf版是可以直接微信发给对方HR或者邮箱上传，word版是后期可以再修改， 亲要妥善存储；\n4.定稿后 30 天内免费售后噢（不包括更换模板、求职意向变动带来的内容改动）；\n5.为了保障服务质量，我们采用建群方式沟通，亲不要私加执笔老师，有任何问题可以在本群直接沟通即可；\n6.切记不要跟执笔老师私下交易，私下交易，出现任何问题，本店概不负责。')
+        roominfoWnd.SendKeys('{Enter}')
+        roominfoWnd.SendKeys('【注意】如有老师私加好友或者服务态度问题，亲可以第一时间向我反馈，我了解情况后会第一时间为您解决问题。请勿添加写手的私人微信！若写手私自添加您的微信，欢迎举报，核实属实，简历制作免费，感谢信任和支持!')
+        roominfoWnd.SendKeys('{Enter}')
+
 
     def GetGroupMembers(self):
         """获取当前聊天群成员
