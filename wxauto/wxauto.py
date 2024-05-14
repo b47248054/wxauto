@@ -419,6 +419,54 @@ class WeChat(WeChatBase):
         finally:
             uia.SetGlobalSearchTimeout(10)
 
+    def AddFriend(self, who, msg=None, remark=None, tags=None):
+        """添加好友
+
+        Args:
+            who (str): 要添加的好友名
+            remark (str, optional): 好友备注
+            tags (list, optional): 好友标签
+        """
+        self._show()
+        self.UiaAPI.SendKeys('{Ctrl}f', waitTime=1)
+        self.B_Search.SendKeys(who, waitTime=1.5)
+        # SearchResut = self.SessionBox.GetChildren()[1].GetChildren()[1]
+        # firstresult = [i for i in SearchResut.GetChildren()[0].GetChildren() if who in i.Name][0]
+
+        if self.SessionBox.TextControl(searchDepth=10,Name=f'微信号:{who}').Exists(maxSearchSeconds=0.1):
+            self.SessionBox.TextControl(searchDepth=10,Name=f'微信号:{who}').Click(simulateMove=False)
+            return '用户已存在'
+        if self.SessionBox.TextControl(searchDepth=10,Name='网络查找手机/QQ号').Exists(maxSearchSeconds=0.1):
+            self.SessionBox.TextControl(searchDepth=10,Name='网络查找手机/QQ号').Click(simulateMove=False)
+        if self.SessionBox.TextControl(searchDepth=10,Name='网络查找微信号').Exists(maxSearchSeconds=0.1):
+            self.SessionBox.TextControl(searchDepth=10,Name='网络查找微信号').Click(simulateMove=False)
+        # 用户不存在
+        if self.UiaAPI.PaneControl(searchDepth=5, foundIndex=1,Name='该用户不存在').Exists(maxSearchSeconds=0.1):
+            self.UiaAPI.PaneControl(searchDepth=5, foundIndex=1,Name='该用户不存在').ButtonControl(Name='确定').Click(simulateMove=False)
+            return '用户不存在'
+        # 查找到用户，并添加到通讯录
+        uia.PaneControl(ClassName='ContactProfileWnd', searchDepth=1).ButtonControl(Name='添加到通讯录').Click(simulateMove=False)
+        NewFriendsWnd = self.UiaAPI.WindowControl(ClassName='WeUIDialog',Name='添加朋友请求')
+        if msg:
+            msgedit = NewFriendsWnd.TextControl(Name='发送添加朋友申请').GetParentControl().EditControl()
+            msgedit.Click(simulateMove=False)
+            msgedit.SendKeys('{Ctrl}a', waitTime=0)
+            msgedit.SendKeys(msg)
+        if remark:
+            remarkedit = NewFriendsWnd.TextControl(Name='备注名').GetParentControl().EditControl()
+            remarkedit.Click(simulateMove=False)
+            remarkedit.SendKeys('{Ctrl}a', waitTime=0)
+            remarkedit.SendKeys(remark)
+        if tags:
+            tagedit = NewFriendsWnd.TextControl(Name='标签').GetParentControl().EditControl()
+            for tag in tags:
+                tagedit.Click(simulateMove=False)
+                tagedit.SendKeys(tag)
+                NewFriendsWnd.PaneControl(ClassName='DropdownWindow').TextControl().Click(simulateMove=False)
+
+        NewFriendsWnd.ButtonControl(Name='确定').Click(simulateMove=False)
+        return '已发送好友申请'
+
     def GetNewFriends(self):
         """获取新的好友申请列表
         
@@ -491,6 +539,44 @@ class WeChat(WeChatBase):
     #     files.DownloadFiles(who, amount)
     #     files.Close()
 
+    def CreateGroup(self, members, groupname):
+        """创建群聊
+
+        Args:
+            members (list): 群成员列表
+        """
+        self._show()
+        self.SessionBox.ButtonControl(Name='发起群聊').Click(simulateMove=False)
+        NewGroupWnd = self.UiaAPI.WindowControl(ClassName='AddMemberWnd', Name='AddMemberWnd')
+        for member in members:
+            NewGroupWnd.SendKeys('{Ctrl}f', waitTime=1)
+            NewGroupWnd.SendKeys('{Ctrl}a')
+            NewGroupWnd.SendKeys(member)
+            NewGroupWnd.ListItemControl(Name=f'{member}').Click(simulateMove=False)
+        NewGroupWnd.ButtonControl(Name='完成').Click(simulateMove=False)
+        time.sleep(10)
+        self.SwitchToChat()
+        # 设置群名称
+        ele = self.ChatBox.PaneControl(searchDepth=7, foundIndex=6).ButtonControl(Name='聊天信息')
+        try:
+            uia.SetGlobalSearchTimeout(1)
+            rect = ele.BoundingRectangle
+            time.sleep(2)
+            Click(rect)
+        except:
+            return
+        finally:
+            uia.SetGlobalSearchTimeout(10)
+        roominfoWnd = self.UiaAPI.WindowControl(ClassName='SessionChatRoomDetailWnd', searchDepth=1)
+        # 设置群聊名称
+        roominfoWnd.TextControl(Name='群聊名称').GetNextSiblingControl().Click(simulateMove=False)
+        roominfoWnd.SendKeys(groupname)
+        roominfoWnd.SendKeys('{Enter}')
+        roominfoWnd.SendKeys('{Esc}')
+        self.ChatBox.EditControl().SendKeys(groupname)
+        self.ChatBox.EditControl().SendKeys('{Enter}')
+        return self.ChatBox.EditControl()
+
     def GetGroupMembers(self):
         """获取当前聊天群成员
 
@@ -541,10 +627,23 @@ class WeChat(WeChatBase):
         if keywords:
             contactwnd.Search(keywords)
         friends = contactwnd.GetAllFriends()
-        contactwnd.Close()
-        self.SwitchToChat()
+        # contactwnd.Close()
+        # self.SwitchToChat()
         return friends
-    
+
+    def UpdateRemark(self, ele, remark):
+        """更新好友备注
+
+        Args:
+            who (str): 要更新备注的好友名
+            remark (str): 新的备注
+        """
+        # self._show()
+        # self.SwitchToContact()
+        # self.SessionBox.ListControl(Name="联系人").ButtonControl(Name="通讯录管理").Click(simulateMove=False)
+        contactwnd = ContactWnd()
+        contactwnd.EditRemark(ele,remark)
+
     def GetAllListenChat(self):
         """获取所有监听对象"""
         return self.listen

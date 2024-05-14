@@ -519,10 +519,13 @@ class ContactWnd:
         """获取好友列表"""
         self._show()
         contacts_list = []
+        if self.ContactBox.TextControl(searchDepth=10,Name='无符合条件的结果').Exists(maxSearchSeconds=0.1):
+            return contacts_list
         while True:
             contact_ele_list = self.ContactBox.ListControl().GetChildren()
             for ele in contact_ele_list:
                 contacts_info = {
+                    'ele': ele,
                     'nickname': ele.TextControl().Name,
                     'remark': ele.ButtonControl(foundIndex=2).Name,
                     'tags': ele.ButtonControl(foundIndex=3).Name.split('，'),
@@ -537,7 +540,21 @@ class ContactWnd:
             self.ContactBox.WheelDown(wheelTimes=5, waitTime=0.1)
             if bottom == self.ContactBox.ListControl().GetChildren()[-1].BoundingRectangle.top:
                 return contacts_list
-    
+
+    def EditRemark(self, contacts_info, remark):
+        """修改好友备注名
+
+        Args:
+            contacts_info (dict): 好友信息
+            remark (str): 新备注名
+        """
+        self._show()
+        ele = contacts_info['ele']
+        ele.ButtonControl(foundIndex=2).Click(simulateMove=False)
+        ele.SendKeys('{Ctrl}a')
+        ele.SendKeys(remark)
+        ele.SendKeys('{Enter}')
+
     def Close(self):
         """关闭联系人窗口"""
         self._show()
