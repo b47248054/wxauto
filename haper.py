@@ -52,11 +52,26 @@ class Order:
         self.create_time = time.time()  # 订单创建时间
         self.finish_time = None  # 订单完成时间
         self.timeout = 3600  # 订单超时时间，单位秒
+        # 初始化每种操作的上次执行时间为负无穷
+        self.last_action_time = {action: -float('inf') for action in ["add_customer", "assign_worker"]}
+        # 每种操作对应的时间间隔，单位为秒
+        self.time_intervals = {"add_customer": 300, "assign_worker": 180}
         self.status = {
             'customer_added': False,  # 客户是否已添加
             'worker_assigned': False,  # 订单是否已分配给写手
             'work_group_created': False,  # 群是否已创建
-        }  # 订单状态【客户已添加】【待接单】【制作中】【已发货】【已完成】
+        }
+
+    def check_if_action_needed(self, action_type):
+        current_time = time.time()
+        # 检查传入的操作类型是否在时间间隔字典中，如果距上次执行操作的时间已经超过设定的时间间隔，则需要执行操作
+        if action_type in self.time_intervals and current_time - self.last_action_time[action_type] >= self.time_intervals[action_type]:
+            # 如果满足执行条件，则更新上次操作时间并返回 True，表示需要执行对应操作
+            self.last_action_time[action_type] = current_time
+            return True
+        else:
+            # 如果不满足执行条件，则返回 False，表示不需要执行对应操作
+            return False
 
     def set_worker(self, worker):
         if not self.worker:
@@ -77,7 +92,7 @@ class Order:
         return self.status
 
     def __str__(self):
-        return f'Order({self.order_id}, {self.info}, {self.wechat_id}, {self.worker}, {self.status}, {self.create_time}, {self.finish_time}, {self.timeout})'
+        return f'Order({self.order_id}, {self.worker}, {self.status}, {self.create_time})'
 
 class WechatMessageListener:
     def __init__(self, wechat, queue, customer_service_ids, writer_ids, system_ids):
@@ -101,9 +116,10 @@ class WechatMessageListener:
             for chat in msgs:
                 msg = msgs.get(chat)   # 获取消息内容
                 for i in msg:
+                    self.logger.info(f'---Received message{i}')
                     if i.type == 'friend':
-                        self.logger.info(f'---Received message{i.info}')
                         self.message_queue.put((i.sender, i, chat))
+                        self.logger.info(f'---put message{i}')
             time.sleep(wait)
 
 class OrderListener:
@@ -130,19 +146,19 @@ class OrderListener:
         return self.order_list[order_id]['order']
 
     def listen_and_forward(self):
-        wait = 5*60  # 设置300秒查看一次
+        wait = 30  # 设置300秒查看一次
         logger.info('Order listener started')
         while True:
             time.sleep(wait)
             for order_id, order_info in self.order_list.items():
-                logger.info(f'Checking order {order_id} status')
+                logger.info(f'Checking order {order_id} status.{order_info}')
 
                 # 判断是否添加好友
-                if order_info['order'].status['customer_added'] is False:
+                if order_info['order'].status['customer_added'] is False and order_info['order'].check_if_action_needed("add_customer"):
                     self.queue.put((order_info['sender_id'], self.transfer_message(order_info['message'],1), order_info['chat']))
 
                 # 订单是否有写手接单
-                if order_info['order'].status['worker_assigned'] is False:
+                if order_info['order'].status['worker_assigned'] is False and order_info['order'].check_if_action_needed("assign_worker"):
                     self.queue.put((order_info['sender_id'], self.transfer_message(order_info['message'],2), order_info['chat']))
 
                 # 订单是否已经拉群
@@ -222,14 +238,14 @@ class CommandExecutor:
                 if add_res == '已添加':
                     order.set_customer_added()
                 chat.SendMsg(f'{order.order_id}已派单，等待写手接单，客户微信{add_res}')
-            elif command == '2': # 仅添加好友，不派单
-                add_res = self.add_customer_wechat(order.wechat_id,order.order_id)
-                if add_res == '已添加':
-                    order.set_customer_added()
-                chat.SendMsg(f'{order.order_id}{add_res}')
-            elif command == '3': # 仅给写手发消息，不加客户微信
-                self.dispatch_order(order)
-                chat.SendMsg(f'{order.order_id}已派单，等待写手接单')
+            # elif command == '2': # 仅添加好友，不派单
+            #     add_res = self.add_customer_wechat(order.wechat_id,order.order_id)
+            #     if add_res == '已添加':
+            #         order.set_customer_added()
+            #     chat.SendMsg(f'{order.order_id}{add_res}')
+            # elif command == '3': # 仅给写手发消息，不加客户微信
+            #     self.dispatch_order(order)
+            #     chat.SendMsg(f'{order.order_id}已派单，等待写手接单')
 
         elif sender_type == '写手':
             if command == '1':
@@ -259,11 +275,12 @@ class CommandExecutor:
 
     # 添加客户微信好友
     def add_customer_wechat(self,wechat_id,order_id):
-        friends = self.wx.GetAllFriends(wechat_id)
+        # 用订单id查找???
+        friends = self.wx.GetAllFriends(order_id)
         if len(friends) > 0:
             self.logger.info(f'Customer {wechat_id} already has friends: {friends}')
             for friend in friends:
-                # 如果是老客户，需要更新备注名称
+                # 如果是老客户，需要更新备注名称，发单是微信名称写原订单编号
                 if friend['remark'] != order_id:
                     self.logger.info(f'老客户，需要更新备注名称。Updating customer {wechat_id}[{friend['remark']}] remark to {order_id}')
                     self.wx.UpdateRemark(friend, order_id)
