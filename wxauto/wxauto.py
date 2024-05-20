@@ -696,7 +696,7 @@ class WeChat(WeChatBase):
             if ContactProfileWnd.ButtonControl(Name='添加到通讯录').Exists(maxSearchSeconds=2):
                 # 点击添加到通讯录
                 ContactProfileWnd.ButtonControl(Name='添加到通讯录').Click(simulateMove=False)
-            if ContactProfileWnd.ButtonControl(Name='更多').Exists(maxSearchSeconds=2):
+            elif ContactProfileWnd.ButtonControl(Name='更多').Exists(maxSearchSeconds=2):
                 # 好友已存在
                 ContactProfileWnd.ButtonControl(Name='更多').Click(simulateMove=False)
                 ContactProfileWnd.ButtonControl(Name='更多').SendKeys('{Down}', waitTime=0)
