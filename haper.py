@@ -235,10 +235,11 @@ class CommandExecutor:
             if command == '1': # 派单，给写手发消息，加客户微信
                 self.dispatch_order(order)
                 add_res = self.add_customer_wechat(order.wechat_id,order.order_id)
-                if add_res == '已添加':
+                if '已存在' == add_res:
                     order.set_customer_added()
-                chat.SendMsg(f'{order.order_id}已派单，等待写手接单，客户微信{add_res}')
-            # elif command == '2': # 仅添加好友，不派单
+                    self.wx.SendMsg(f'您好，我是橙心简历负责人，您的订单已收到，稍等会给你和执笔老师拉群，有问题可以随时联系我。', order.order_id)
+                chat.SendMsg(f'{order.order_id}已派单，等待写手接单，客户微信【{add_res}】')
+            # elif command == '2': # TODO 更新订单信息
             #     add_res = self.add_customer_wechat(order.wechat_id,order.order_id)
             #     if add_res == '已添加':
             #         order.set_customer_added()
@@ -252,6 +253,7 @@ class CommandExecutor:
                 if not order:
                     chat.SendMsg(f'{message.content.split("【编号】")[1].split("\n")[0]}已失效，请尝试其他订单')
                 elif self.accept_order(sender_id, order):
+                    # TODO 立刻触发一次订单监听
                     chat.SendMsg(f'{order.order_id}接单成功，请稍等拉群')
                 else:
                     chat.SendMsg(f'{order.order_id}已经被抢了，请尝试其他订单')
@@ -261,9 +263,10 @@ class CommandExecutor:
             if command == '1': # 监听好友是否添加成功
                 logger.info(f'Checking if customer {order} has been added to friends')
                 add_res = self.add_customer_wechat(order.wechat_id,order.order_id)
-                if add_res == '已添加':
+                if '已存在' == add_res:
                     order.set_customer_added()
-                chat.SendMsg(f'{order.order_id}{add_res}')
+                    self.wx.SendMsg(f'您好，我是橙心简历负责人，您的订单已收到，稍等会给你和执笔老师拉群，有问题可以随时联系我。', order.order_id)
+                chat.SendMsg(f'{order.order_id}已派单，等待写手接单，客户微信【{add_res}】')
             elif command == '2': # 监听订单是否分配给写手
                 logger.info(f'Checking if order {order} has been assigned to a writer')
                 self.dispatch_order(order)
@@ -275,22 +278,10 @@ class CommandExecutor:
 
     # 添加客户微信好友
     def add_customer_wechat(self,wechat_id,order_id):
-        # 用订单id查找???
-        friends = self.wx.GetAllFriends(order_id)
-        if len(friends) > 0:
-            self.logger.info(f'Customer {wechat_id} already has friends: {friends}')
-            for friend in friends:
-                # 如果是老客户，需要更新备注名称，发单是微信名称写原订单编号
-                if friend['remark'] != order_id:
-                    self.logger.info(f'老客户，需要更新备注名称。Updating customer {wechat_id}[{friend['remark']}] remark to {order_id}')
-                    self.wx.UpdateRemark(friend, order_id)
-                self.logger.info(f'新客户，Customer {wechat_id}[{friend['remark']}] already has friend with order_id: {order_id}')
-                self.wx.SendMsg(f'您好，我是橙心简历负责人，您的订单已收到，稍等会给你和执笔老师拉群，有问题可以随时联系我。', order_id)
-            return '已添加'
-        else:
-            logger.info(f'Customer {wechat_id} not in friends, adding friend with order_id: {order_id}')
-            self.wx.AddNewFriend(wechat_id,'您好，我是橙心简历负责人',order_id,'打')
-            return self.wx.AddFriend(wechat_id,'您好，我是橙心简历负责人',order_id,'打')
+        res = self.wx.AddNewFriend(wechat_id,'您好，我是橙心简历负责人',order_id,'打')
+        self.wx.SwitchToChat()
+        return res
+
     def dispatch_order(self, order):
         self.logger.info(f'Dispatched order: {order}')
         # 遍历所有写手，发送消息

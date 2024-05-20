@@ -683,6 +683,8 @@ class WeChat(WeChatBase):
         """
         self._show()
         self.SwitchToContact()
+        if self.SessionBox.ButtonControl(Name='取消').Exists(maxSearchSeconds=2):
+            self.SessionBox.ButtonControl(Name='取消').Click(simulateMove=False)
         self.SessionBox.ButtonControl(Name='添加朋友').Click(simulateMove=False)
         edit = self.SessionBox.EditControl(Name='微信号/手机号')
         edit.Click(simulateMove=False)
@@ -691,11 +693,27 @@ class WeChat(WeChatBase):
 
         ContactProfileWnd = uia.PaneControl(ClassName='ContactProfileWnd')
         if ContactProfileWnd.Exists(maxSearchSeconds=2):
-            # 点击添加到通讯录
-            ContactProfileWnd.ButtonControl(Name='添加到通讯录').Click(simulateMove=False)
+            if ContactProfileWnd.ButtonControl(Name='添加到通讯录').Exists(maxSearchSeconds=2):
+                # 点击添加到通讯录
+                ContactProfileWnd.ButtonControl(Name='添加到通讯录').Click(simulateMove=False)
+            if ContactProfileWnd.ButtonControl(Name='更多').Exists(maxSearchSeconds=2):
+                # 好友已存在
+                ContactProfileWnd.ButtonControl(Name='更多').Click(simulateMove=False)
+                ContactProfileWnd.ButtonControl(Name='更多').SendKeys('{Down}', waitTime=0)
+                ContactProfileWnd.ButtonControl(Name='更多').SendKeys('{Enter}', waitTime=0)
+
+                OldFriendsWnd = ContactProfileWnd.WindowControl(ClassName='WeUIDialog')
+                if remark:
+                    remarkedit = OldFriendsWnd.TextControl(Name='备注名').GetParentControl().EditControl()
+                    remarkedit.Click(simulateMove=False)
+                    remarkedit.SendKeys('{Ctrl}a', waitTime=0)
+                    remarkedit.SendKeys(remark)
+
+                OldFriendsWnd.ButtonControl(Name='确定').Click(simulateMove=False)
+                ContactProfileWnd.SendKeys('{Esc}', waitTime=0)
+                return '已存在'
         else:
-            print('未找到联系人')
-            return False
+            return '未找到'
 
         NewFriendsWnd = self.UiaAPI.WindowControl(ClassName='WeUIDialog')
         if NewFriendsWnd.Exists(maxSearchSeconds=2):
@@ -719,7 +737,7 @@ class WeChat(WeChatBase):
                     NewFriendsWnd.PaneControl(ClassName='DropdownWindow').TextControl().Click(simulateMove=False)
 
             NewFriendsWnd.ButtonControl(Name='确定').Click(simulateMove=False)
-        return True
+        return '已申请'
     
 class WeChatFiles:
     def __init__(self, language='cn') -> None:
