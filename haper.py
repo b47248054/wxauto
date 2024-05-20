@@ -289,6 +289,7 @@ class CommandExecutor:
             return '已添加'
         else:
             logger.info(f'Customer {wechat_id} not in friends, adding friend with order_id: {order_id}')
+            self.wx.AddNewFriend(wechat_id,'您好，我是橙心简历负责人',order_id,'打')
             return self.wx.AddFriend(wechat_id,'您好，我是橙心简历负责人',order_id,'打')
     def dispatch_order(self, order):
         self.logger.info(f'Dispatched order: {order}')
