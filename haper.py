@@ -11,19 +11,18 @@ import threading
 # 创建TimedRotatingFileHandler实例
 file_handler = TimedRotatingFileHandler('haper.log', encoding='utf-8', when='midnight', interval=1, backupCount=7)
 file_handler.suffix = "%Y-%m-%d"
-file_handler.setLevel(logging.INFO)
-file_handler.setFormatter(logging.Formatter('%(asctime)s - %(pathname)s:%(lineno)d - %(levelname)s - %(message)s'))
-
+file_handler.setLevel(logging.DEBUG)
+file_handler.setFormatter(logging.Formatter('%(asctime)s - %(module)s - %(lineno)d - %(message)s'))
 
 # 创建StreamHandler实例
 console_handler = logging.StreamHandler(sys.stdout)
 console_handler.setLevel(logging.INFO)
-console_handler.setFormatter(logging.Formatter('%(asctime)s - %(pathname)s:%(lineno)d - %(levelname)s - %(message)s'))
+console_handler.setFormatter(logging.Formatter('%(asctime)s - %(module)s - %(lineno)d - %(message)s'))
 
 # 创建Logger实例并添加处理器
 loggername = 'my_logger'
 logger = logging.getLogger(loggername)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 logger.addHandler(file_handler)
 logger.addHandler(console_handler)
 
@@ -52,10 +51,12 @@ class Order:
         self.create_time = time.time()  # 订单创建时间
         self.finish_time = None  # 订单完成时间
         self.timeout = 3600  # 订单超时时间，单位秒
-        # 初始化每种操作的上次执行时间为负无穷
-        self.last_action_time = {action: -float('inf') for action in ["add_customer", "assign_worker"]}
+        # 初始化每种操作的首次静默时间为10分钟（600秒）
+        self.initial_silence_time = 600  # 10分钟，单位秒
+        # 修改初始化时刻，使其成为当前时刻减去初始静默时间的结果
+        self.last_action_time = {action: self.create_time for action in ["add_customer", "assign_worker"]}
         # 每种操作对应的时间间隔，单位为秒
-        self.time_intervals = {"add_customer": 300, "assign_worker": 180}
+        self.time_intervals = {"add_customer": 300, "assign_worker": 300}
         self.status = {
             'customer_added': False,  # 客户是否已添加
             'worker_assigned': False,  # 订单是否已分配给写手
@@ -64,14 +65,17 @@ class Order:
 
     def check_if_action_needed(self, action_type):
         current_time = time.time()
-        # 检查传入的操作类型是否在时间间隔字典中，如果距上次执行操作的时间已经超过设定的时间间隔，则需要执行操作
-        if action_type in self.time_intervals and current_time - self.last_action_time[action_type] >= self.time_intervals[action_type]:
-            # 如果满足执行条件，则更新上次操作时间并返回 True，表示需要执行对应操作
-            self.last_action_time[action_type] = current_time
-            return True
-        else:
-            # 如果不满足执行条件，则返回 False，表示不需要执行对应操作
-            return False
+        if action_type in self.time_intervals:
+            # 如果订单创建后不足首次静默时间，则不执行任何操作
+            if current_time - self.create_time < self.initial_silence_time:
+                return False
+            # 计算距离上次执行操作的时间间隔
+            time_since_last_action = current_time - self.last_action_time[action_type]
+            if time_since_last_action >= self.time_intervals[action_type]:
+                # 更新上次操作时间
+                self.last_action_time[action_type] = current_time
+                return True
+        return False
 
     def set_worker(self, worker):
         if not self.worker:
@@ -105,7 +109,7 @@ class WechatMessageListener:
         self.wx = wechat
         for id in self.customer_service_ids + self.writer_ids:
             self.wx.AddListenChat(who=id)
-            logger.info('添加聊天监听：{}'.format(id))
+            logger.debug('添加聊天监听：{}'.format(id))
 
     def listen_and_forward(self):
         # 持续监听消息
@@ -116,10 +120,9 @@ class WechatMessageListener:
             for chat in msgs:
                 msg = msgs.get(chat)   # 获取消息内容
                 for i in msg:
-                    self.logger.info(f'---Received message{i}')
+                    self.logger.debug(f'---Received message{i}')
                     if i.type == 'friend':
                         self.message_queue.put((i.sender, i, chat))
-                        self.logger.info(f'---put message{i}')
             time.sleep(wait)
 
 class OrderListener:
@@ -136,7 +139,7 @@ class OrderListener:
             'chat': chat
         }
         self.order_list[order.order_id] = order_info
-        self.logger.info(f'Added order: {order}')
+        self.logger.debug(f'{order} Added to OrderListener.')
 
     def get_order(self, order_id):
         # 从order_list中获取订单信息
@@ -146,16 +149,19 @@ class OrderListener:
         return self.order_list[order_id]['order']
 
     def listen_and_forward(self):
-        wait = 30  # 设置300秒查看一次
-        logger.info('Order listener started')
+        wait = 3  # 设置300秒查看一次
         while True:
             time.sleep(wait)
             for order_id, order_info in self.order_list.items():
-                logger.info(f'Checking order {order_id} status.{order_info}')
+                logger.debug(f'{order_info['order']} Checking order.')
+
+                # 判断好友申请是否通过
+                if order_info['order'].status['customer_added'] is False:
+                    self.queue.put((order_info['sender_id'], self.transfer_message(order_info['message'],1), order_info['chat']))
 
                 # 判断是否添加好友
                 if order_info['order'].status['customer_added'] is False and order_info['order'].check_if_action_needed("add_customer"):
-                    self.queue.put((order_info['sender_id'], self.transfer_message(order_info['message'],1), order_info['chat']))
+                    self.queue.put((order_info['sender_id'], self.transfer_message(order_info['message'],4), order_info['chat']))
 
                 # 订单是否有写手接单
                 if order_info['order'].status['worker_assigned'] is False and order_info['order'].check_if_action_needed("assign_worker"):
@@ -165,7 +171,7 @@ class OrderListener:
                 if order_info['order'].status['work_group_created'] is False and order_info['order'].status['customer_added'] is True and order_info['order'].status['worker_assigned'] is True:
                     self.queue.put((order_info['sender_id'], self.transfer_message(order_info['message'],3), order_info['chat']))
 
-    # 转行message，构造系统消息，设定command类型为1，加好友，2，派单，3，拉群
+    # 转行message，构造系统消息，设定command类型为 1，好友申请是否通过，4，加好友，2，派单，3，拉群
     def transfer_message(self, message, command):
         message.content = f'{command}\n{message.content.split('\n', 1)[1]}'
         return message
@@ -187,10 +193,10 @@ class CommandExecutor:
             sender_type = self.get_sender_type(sender_id)
             command = self.parse_command(message)
             if command:
-                self.logger.info(f'Processing command from {sender_type}: {command}, order info: {message}')
+                self.logger.debug(f'---Processing message {message}')
                 self.execute_command(sender_id, command, message, sender_type, chat, order_listener)
             else:
-                self.logger.info(f'Invalid command from {sender_type}[{sender_id}]: {message.info}')
+                self.logger.debug(f'---Invalid command from {sender_type}[{sender_id}]: {message.info}')
             time.sleep(1)
 
     def get_sender_type(self, sender_id):
@@ -205,7 +211,7 @@ class CommandExecutor:
 
     def parse_command(self, message):
         # 解析命令，提取引用的内容
-        logger.info(f'Parsing command : {message}')
+        logger.debug(f'---Parsing command : {message}')
         if message.content.startswith('1\n引用') or message.content.startswith('2\n引用') or message.content.startswith('3\n引用'):
             parts = message.content.split('\n', 1)
             return parts[0]
@@ -214,7 +220,7 @@ class CommandExecutor:
 
     def parse_order(self, message, sender_type):
         # 解析命令，提取引用的内容
-        logger.info(f'Parsing message : {message}')
+        logger.debug(f'---Parsing message : {message}')
         order_id = message.content.split('【编号】')[1].split('\n')[0] # 获取订单号
         if order_listener.get_order(order_id):
             order = order_listener.get_order(order_id)
@@ -232,13 +238,17 @@ class CommandExecutor:
         if sender_type == '客服':
             # 监听订单
             order_listener.add(order, message, chat)
-            if command == '1': # 派单，给写手发消息，加客户微信
+            if command == '1': # 派单，给写手发消息，加客户微信 TODO 重复发单的问题
                 self.dispatch_order(order)
+                chat.SendMsg(f'{order.order_id}已派单，等待写手接单')
+                logger.info(f'to {chat} msg : {order.order_id}已派单，等待写手接单')
                 add_res = self.add_customer_wechat(order.wechat_id,order.order_id)
                 if '已存在' == add_res:
                     order.set_customer_added()
                     self.wx.SendMsg(f'您好，我是橙心简历负责人，您的订单已收到，稍等会给你和执笔老师拉群，有问题可以随时联系我。', order.order_id)
-                chat.SendMsg(f'{order.order_id}已派单，等待写手接单，客户微信【{add_res}】')
+                    logger.info(f'to {order.order_id} msg : 您好，我是橙心简历负责人，您的订单已收到，稍等会给你和执笔老师拉群，有问题可以随时联系我。')
+                chat.SendMsg(f'{order.order_id}，客户微信【{add_res}】')
+                logger.info(f'to {chat} msg : {order.order_id}，客户微信【{add_res}】')
             # elif command == '2': # TODO 更新订单信息
             #     add_res = self.add_customer_wechat(order.wechat_id,order.order_id)
             #     if add_res == '已添加':
@@ -252,29 +262,48 @@ class CommandExecutor:
             if command == '1':
                 if not order:
                     chat.SendMsg(f'{message.content.split("【编号】")[1].split("\n")[0]}已失效，请尝试其他订单')
+                    logger.info(f'to {chat} msg : {message.content.split("【编号】")[1].split("\n")[0]}已失效，请尝试其他订单')
                 elif self.accept_order(sender_id, order):
                     # TODO 立刻触发一次订单监听
                     chat.SendMsg(f'{order.order_id}接单成功，请稍等拉群')
+                    logger.info(f'to {chat} msg : {order.order_id}接单成功，请稍等拉群')
                 else:
                     chat.SendMsg(f'{order.order_id}已经被抢了，请尝试其他订单')
+                    logger.info(f'to {chat} msg : {order.order_id}已经被抢了，请尝试其他订单')
 
         elif sender_type == '系统':
             # 系统的命令执行逻辑
             if command == '1': # 监听好友是否添加成功
+                logger.debug(f'Checking if customer {order} has been added to friends')
+                self.wx.ChatWith('文件传输助手')
+                if self.wx.CheckNewMessage():
+                    sessiondict=self.wx.GetSessionList(newmessage=True)
+                    if order.order_id in sessiondict.keys():
+                        order.set_customer_added()
+                        self.wx.SendMsg(f'您好，我是橙心简历负责人，您的订单已收到，稍等会给你和执笔老师拉群，有问题可以随时联系我。', order.order_id)
+                        logger.info(f'to {order.order_id} msg : 您好，我是橙心简历负责人，您的订单已收到，稍等会给你和执笔老师拉群，有问题可以随时联系我。')
+                        chat_msg = f'{order.order_id}，客户微信【已添加】'
+                        chat.SendMsg(chat_msg)
+                        logger.info(f'to {chat} msg : {chat_msg}')
+
+            elif command == '2': # 监听订单是否分配给写手
+                logger.debug(f'Checking if order {order} has been assigned to a writer')
+                self.dispatch_order(order)
+                chat.SendMsg(f'{order.order_id}还没有写手接单，已重新派单，请关注，并私信写手')
+                logger.info(f'to {chat} msg : {order.order_id}还没有写手接单，已重新派单，请关注，并私信写手')
+            elif command == '3': # 监听订单是否拉群
+                logger.debug(f'Checking if order {order} has been created a work group')
+                chat.SendMsg(f'{order.order_id}，客户添加成功，写手【{order.worker}】已经接单，正在拉群，请稍等...')
+                logger.info(f'to {chat} msg : {order.order_id}，客户添加成功，写手【{order.worker}】已经接单，正在拉群，请稍等...')
+                self.start_working(order)
+            elif command == '4': # 需要重新添加好友
                 logger.info(f'Checking if customer {order} has been added to friends')
                 add_res = self.add_customer_wechat(order.wechat_id,order.order_id)
                 if '已存在' == add_res:
                     order.set_customer_added()
                     self.wx.SendMsg(f'您好，我是橙心简历负责人，您的订单已收到，稍等会给你和执笔老师拉群，有问题可以随时联系我。', order.order_id)
-                chat.SendMsg(f'{order.order_id}已派单，等待写手接单，客户微信【{add_res}】')
-            elif command == '2': # 监听订单是否分配给写手
-                logger.info(f'Checking if order {order} has been assigned to a writer')
-                self.dispatch_order(order)
-                chat.SendMsg(f'{order.order_id}还没有写手接单，已重新派单，请关注，并私信写手')
-            elif command == '3': # 监听订单是否拉群
-                logger.info(f'Checking if order {order} has been created a work group')
-                chat.SendMsg(f'{order.order_id}，客户添加成功，写手【{order.worker}】已经接单，正在拉群，请稍等...')
-                self.start_working(order)
+                    logger.info(f'to {order.order_id} msg : 您好，我是橙心简历负责人，您的订单已收到，稍等会给你和执笔老师拉群，有问题可以随时联系我。')
+                chat.SendMsg(f'{order.order_id}，重新添加客户微信【{add_res}】，请关注')
 
     # 添加客户微信好友
     def add_customer_wechat(self,wechat_id,order_id):
@@ -283,21 +312,27 @@ class CommandExecutor:
         return res
 
     def dispatch_order(self, order):
-        self.logger.info(f'Dispatched order: {order}')
+        self.logger.debug(f'---Dispatched order: {order}')
         # 遍历所有写手，发送消息
         for writer_id in self.writer_ids:
             self.wx.SendMsg(f'{order.info}\n老师接单吗？接单请引用订单信息，并回复【1】', writer_id)
+            logger.info(f'to {writer_id} msg : {order.info}\n老师接单吗？接单请引用订单信息，并回复【1】')
     def accept_order(self, writer_id, order_info):
-        self.logger.info(f'Accepted order: {order_info}')
+        self.logger.debug(f'---Accepted order: {order_info}')
         return order_info.set_worker(writer_id)
 
 
     def start_working(self, order_info):
-        self.logger.info(f'Started working on order: {order_info}')
+        self.logger.debug(f'Started working on order: {order_info}')
+        msgs = ['亲爱的客户，您好，感谢您对我们家的信任在我们家下单，我是店铺负责人，已经帮您分配好执笔老师，简历定制包含个人隐私，在未经本人同意的情况下，我们是绝对禁止外发出去，您可放心。',
+                '【客户须知】\n1.简历一般初稿时间在客户提供了相关资料信息后6-24小时左右，如需加急得先联系平台在线客服；\n2.模板确认好以后，中途不可更换；\n3.简历在定稿以后会发word和pdf 2个电子版文件，pdf版是可以直接微信发给对方HR或者邮箱上传，word版是后期可以再修改， 亲要妥善存储；\n4.定稿后 30 天内免费售后噢（不包括更换模板、求职意向变动带来的内容改动）；\n5.为了保障服务质量，我们采用建群方式沟通，亲不要私加执笔老师，有任何问题可以在本群直接沟通即可；\n6.切记不要跟执笔老师私下交易，私下交易，出现任何问题，本店概不负责。',
+                '【注意】如有老师私加好友或者服务态度问题，亲可以第一时间向我反馈，我了解情况后会第一时间为您解决问题。请勿添加写手的私人微信！若写手私自添加您的微信，欢迎举报，核实属实，简历制作免费，感谢信任和支持!']
         # 发送消息给客户，通知客户开始制作
-        self.wx.CreateGroup([order_info.worker, order_info.order_id], f'【{order_info.order_id}】定制服务群')
+        self.wx.CreateWorkGroup([order_info.worker, order_info.order_id], f'【{order_info.order_id}】定制服务群', msgs)
 
         order_info.set_work_group_created()
+        for msg in msgs:
+            logger.info(f'to 【{order_info.order_id}】定制服务群 msg : {msg}')
 
 # 使用示例
 customer_service_ids = ['忠旭']
