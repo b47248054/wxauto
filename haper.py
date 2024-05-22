@@ -129,6 +129,7 @@ class OrderListener:
     def __init__(self,queue):
         self.queue = queue
         self.order_list = {}
+        self.sent_messages = set()  # 用集合来记录已发送的消息的唯一标识
         self.logger = logging.getLogger(loggername)
 
     def add(self, order, message, chat):
@@ -156,26 +157,50 @@ class OrderListener:
                 logger.debug(f'{order_info['order']} Checking order.')
 
                 # 判断好友申请是否通过
-                if order_info['order'].status['customer_added'] is False:
+                if order_info['order'].status['customer_added'] is False and self.exists_message(order_id, 1) is False:
                     self.queue.put((order_info['sender_id'], self.transfer_message(order_info['message'],1), order_info['chat']))
+                    message_id = (order_id, 1)
+                    self.sent_messages.add(message_id)  # 将消息标记为已发送
 
                 # 判断是否添加好友
-                if order_info['order'].status['customer_added'] is False and order_info['order'].check_if_action_needed("add_customer"):
+                if order_info['order'].status['customer_added'] is False and self.exists_message(order_id, 4) is False and order_info['order'].check_if_action_needed("add_customer"):
                     self.queue.put((order_info['sender_id'], self.transfer_message(order_info['message'],4), order_info['chat']))
+                    message_id = (order_id, 4)
+                    self.sent_messages.add(message_id)  # 将消息标记为已发送
 
                 # 订单是否有写手接单
-                if order_info['order'].status['worker_assigned'] is False and order_info['order'].check_if_action_needed("assign_worker"):
+                if order_info['order'].status['worker_assigned'] is False and self.exists_message(order_id, 2) is False and order_info['order'].check_if_action_needed("assign_worker"):
                     self.queue.put((order_info['sender_id'], self.transfer_message(order_info['message'],2), order_info['chat']))
+                    message_id = (order_id, 2)
+                    self.sent_messages.add(message_id)  # 将消息标记为已发送
 
                 # 订单是否已经拉群
-                if order_info['order'].status['work_group_created'] is False and order_info['order'].status['customer_added'] is True and order_info['order'].status['worker_assigned'] is True:
+                if order_info['order'].status['work_group_created'] is False and self.exists_message(order_id, 3) is False and order_info['order'].status['customer_added'] is True and order_info['order'].status['worker_assigned'] is True:
                     self.queue.put((order_info['sender_id'], self.transfer_message(order_info['message'],3), order_info['chat']))
+                    # 使用订单编号和命令类型的元组作为唯一标识
+                    message_id = (order_id, 3)
+                    self.sent_messages.add(message_id)  # 将消息标记为已发送
 
     # 转行message，构造系统消息，设定command类型为 1，好友申请是否通过，4，加好友，2，派单，3，拉群
     def transfer_message(self, message, command):
         message.content = f'{command}\n{message.content.split('\n', 1)[1]}'
         return message
 
+    def exists_message(self, order_id, command):
+        # 使用订单编号和命令类型的元组作为唯一标识
+        message_id = (order_id, command)
+        if message_id in self.sent_messages:
+            self.logger.debug(f'Message for order {order_id} and command {command} has already been sent.')
+            return True  # 如果消息已经存在，则不再发送
+        else:
+            self.logger.debug(f'Message for order {order_id} and command {command} will be sent.')
+            return False
+
+    def consume_message(self, order_id, command):
+        # 处理消费成功的消息，并重置状态，需要重新发送
+        message_id = (order_id, command)
+        if message_id in self.sent_messages:
+            self.sent_messages.remove(message_id)  # 重置消息为未发送状态
 
 
 class CommandExecutor:
@@ -285,17 +310,19 @@ class CommandExecutor:
                         chat_msg = f'{order.order_id}，客户微信【已添加】'
                         chat.SendMsg(chat_msg)
                         logger.info(f'to {chat} msg : {chat_msg}')
-
+                order_listener.consume_message(order.order_id,1)
             elif command == '2': # 监听订单是否分配给写手
                 logger.debug(f'Checking if order {order} has been assigned to a writer')
                 self.dispatch_order(order)
                 chat.SendMsg(f'{order.order_id}还没有写手接单，已重新派单，请关注，并私信写手')
                 logger.info(f'to {chat} msg : {order.order_id}还没有写手接单，已重新派单，请关注，并私信写手')
+                order_listener.consume_message(order.order_id,2)
             elif command == '3': # 监听订单是否拉群
                 logger.debug(f'Checking if order {order} has been created a work group')
                 chat.SendMsg(f'{order.order_id}，客户添加成功，写手【{order.worker}】已经接单，正在拉群，请稍等...')
                 logger.info(f'to {chat} msg : {order.order_id}，客户添加成功，写手【{order.worker}】已经接单，正在拉群，请稍等...')
                 self.start_working(order)
+                order_listener.consume_message(order.order_id,3)
             elif command == '4': # 需要重新添加好友
                 logger.info(f'Checking if customer {order} has been added to friends')
                 add_res = self.add_customer_wechat(order.wechat_id,order.order_id)
@@ -304,6 +331,8 @@ class CommandExecutor:
                     self.wx.SendMsg(f'您好，我是橙心简历负责人，您的订单已收到，稍等会给你和执笔老师拉群，有问题可以随时联系我。', order.order_id)
                     logger.info(f'to {order.order_id} msg : 您好，我是橙心简历负责人，您的订单已收到，稍等会给你和执笔老师拉群，有问题可以随时联系我。')
                 chat.SendMsg(f'{order.order_id}，重新添加客户微信【{add_res}】，请关注')
+                logger.info(f'to {chat} msg : {order.order_id}，重新添加客户微信【{add_res}】，请关注')
+                order_listener.consume_message(order.order_id,4)
 
     # 添加客户微信好友
     def add_customer_wechat(self,wechat_id,order_id):
@@ -336,7 +365,7 @@ class CommandExecutor:
 
 # 使用示例
 customer_service_ids = ['忠旭']
-writer_ids = ['忠旭2']
+writer_ids = ['橙子']
 system_ids = ['SYS']
 
 wx = WeChat()
