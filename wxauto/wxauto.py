@@ -719,6 +719,11 @@ class WeChat(WeChatBase):
         else:
             return '未找到'
 
+        AlertDialogWnd = self.UiaAPI.WindowControl(ClassName='AlertDialog')
+        if AlertDialogWnd.Exists(maxSearchSeconds=2):
+            AlertDialogWnd.ButtonControl(Name='确定').Click(simulateMove=False)
+            return '未找到'
+
         NewFriendsWnd = self.UiaAPI.WindowControl(ClassName='WeUIDialog')
         if NewFriendsWnd.Exists(maxSearchSeconds=2):
             if addmsg:
