@@ -69,7 +69,7 @@ class Config:
 
 class Haperlog:
     # 创建TimedRotatingFileHandler实例
-    file_handler = TimedRotatingFileHandler('haper.log', encoding='utf-8', when='midnight', interval=1, backupCount=7)
+    file_handler = TimedRotatingFileHandler('../logs/haper.log', encoding='utf-8', when='midnight', interval=1, backupCount=7)
     file_handler.suffix = "%Y-%m-%d"
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(logging.Formatter('[%(levelname)s] %(asctime)s - %(module)s - %(lineno)d - %(message)s'))
