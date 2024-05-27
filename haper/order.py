@@ -119,8 +119,12 @@ class OrderListener:
     def check_if_action_needed(self, order_info, action_type):
         current_time = round(time.time())
 
-        if action_type == 'only_check' or action_type == 'create_group':
+        if action_type == 'only_check':
             return True  # 时间不用判断，直接返回True
+
+        if action_type == 'create_group':
+            if order_info['order'].status['customer_added'] is True and order_info['order'].status['worker_assigned'] is True:
+                return True  # 客户已添加，写手已分配，需要创建群
 
         if action_type == 'add_customer' or action_type == 'assign_worker':
             silence_time = order_info[action_type]['silence_time']
