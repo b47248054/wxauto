@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>订单列表</title>
+    <meta charset="UTF-8">
+    <style>
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        th, td {
+            border: 1px solid black;
+            padding: 8px;
+            text-align: center;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+<h1>订单列表</h1>
+<div>
+    <label for="writerId">按写手ID筛选：</label>
+    <select id="writerId" onchange="filterByWriterId()">
+        <option value="">选择写手ID</option>
+        <!-- 下拉列表的选项将在脚本中动态添加 -->
+    </select>
+</div>
+<table id="orderTable">
+    <tr>
+        <th>序号</th>
+        <th>订单ID</th>
+        <th>写手ID</th>
+        <th>订单信息</th>
+        <th>派单时间</th>
+        <th>拉群时间</th>
+        <th>结算价格</th>
+        <th>佣金</th>
+        <th>评价退款</th>
+    </tr>
+</table>
+<div>
+    <p>总结算价格： <span id="totalSettlementPrice"></span></p>
+    <p>总佣金： <span id="totalCommission"></span></p>
+</div>
+<script>
+    // 使用 AJAX 技术向服务器获取订单数据
+    var xhttp = new XMLHttpRequest();
+    xhttp.onreadystatechange = function() {
+        if (this.readyState == 4 && this.status == 200) {
+            var orders = JSON.parse(this.responseText);
+            var select = document.getElementById("writerId");
+            var table = document.getElementById("orderTable");
+            var writerIds = [];  // 用于存储写手ID，避免重复
+            var count = 1; // 定义序号变量，初始值为1
+            orders.forEach(function(order) {
+                if (!writerIds.includes(order.worker_id)) {
+                    writerIds.push(order.worker_id);
+                    var option = document.createElement("option");
+                    option.value = order.worker_id;
+                    option.text = order.worker_id;
+                    select.appendChild(option);
+                }
+
+                var row = table.insertRow(-1);
+                var cell0 = row.insertCell(0); // 插入序号单元格
+                var cell1 = row.insertCell(1);
+                var cell2 = row.insertCell(2);
+                var cell3 = row.insertCell(3);
+                var cell4 = row.insertCell(4);
+                var cell5 = row.insertCell(5);
+                var cell6 = row.insertCell(6);
+                var cell7 = row.insertCell(7);
+                var cell8 = row.insertCell(8);
+                cell0.innerHTML = count; // 设置序号
+                cell1.innerHTML = order.order_id;
+                cell2.innerHTML = order.worker_id;
+                cell3.innerHTML = order.info;
+                cell4.innerHTML = order.create_time;
+                cell5.innerHTML = order.finish_time;
+                cell6.innerHTML = order.settlement_price;
+                cell7.innerHTML = order.commission;
+                cell8.innerHTML = order.evaluation;
+                count++; // 递增序号
+            });
+        }
+    };
+    xhttp.open("GET", "order_data", true);  //假设"/getOrders"是获取订单数据的API路径
+    xhttp.send();
+
+    // 添加筛选和汇总功能
+    function filterByWriterId() {
+        var selectedId = document.getElementById("writerId").value;
+        var rows = document.getElementById("orderTable").rows;
+        var totalSettlementPrice = 0;
+        var totalCommission = 0;
+
+        for (var i = 1; i < rows.length; i++) {
+            var writerId = rows[i].cells[2].innerHTML;
+            var settlementPrice = parseFloat(rows[i].cells[6].innerHTML);  // 将结算价格解析为浮点数
+            var commission = parseFloat(rows[i].cells[7].innerHTML);  // 将佣金解析为浮点数
+
+            if (selectedId === "" || writerId === selectedId) {
+                rows[i].style.display = "";
+                totalSettlementPrice += settlementPrice;
+                totalCommission += commission;
+            } else {
+                rows[i].style.display = "none";
+            }
+        }
+
+        document.getElementById("totalSettlementPrice").textContent = totalSettlementPrice.toFixed(2);  // 显示总结算价格并保留两位小数
+        document.getElementById("totalCommission").textContent = totalCommission.toFixed(2);  // 显示总佣金并保留两位小数
+    }
+</script>
+</body>
+</html>
