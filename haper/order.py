@@ -1,7 +1,7 @@
 import sqlite3
 import time
 from datetime import datetime
-
+from multiprocessing import Manager
 from haper.config import Haperlog, CommandMessage
 
 
@@ -88,7 +88,8 @@ class Order:
 class OrderListener:
     def __init__(self,queue):
         self.queue = queue
-        self.order_info = {}  # 初始化为空的 order_info
+        manager = Manager()
+        self.order_info = manager.dict()  # 初始化为空的 order_info，线程安全
         self.sent_messages = set()  # 用集合来记录已发送的消息的唯一标识
 
     def add(self, command_message, order):
@@ -150,6 +151,7 @@ class OrderListener:
         if all(order_status.values()):
             try:
                 order_data_handler = OrderDataHandler()
+                order_info['order'].finish_time = round(time.time())
                 order_data_handler.save_or_update_order(order_info['order'])
                 Haperlog.logger.debug(f'---Order completed: {order_info["order"]}')
                 del self.order_info[order_info['order'].order_id]

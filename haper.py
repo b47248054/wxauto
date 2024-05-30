@@ -136,8 +136,8 @@ class CommandExecutor:
         elif sender_type == '写手':
             if command == 1:
                 if not order:
-                    chat.SendMsg(f'{order.order_id}已失效，请尝试其他订单')
-                    Haperlog.logger.info(f'|---to {chat} msg : {order.order_id}已失效，请尝试其他订单')
+                    chat.SendMsg(f'单子已经发出去了，老师后面有其他单子在给您发')
+                    Haperlog.logger.info(f'|---to {chat} msg : 单子已经发出去了，老师后面有其他单子在给您发')
                 elif self.accept_order(sender, order):
                     chat.SendMsg(f'{order.order_id}接单成功，请稍等拉群')
                     Haperlog.logger.info(f'|---to {chat} msg : {order.order_id}接单成功，请稍等拉群')
