@@ -252,7 +252,7 @@ class OrderDataHandler:
                     settlement_price DECIMAL(10, 2),
                     commission DECIMAL(10, 2),
                     evaluation INTEGER
-                )
+                );
             ''')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_order_id ON order_info (order_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_worker_id ON order_info (worker_id)')
