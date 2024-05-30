@@ -16,10 +16,10 @@ class WechatMessageListener:
         self.wx = wechat
         for id in self.customer_service_ids:
             self.wx.AddListenChat(who=id)
-            Haperlog.logger.debug('添加聊天监听：{}'.format(id))
+            Haperlog.logger.debug('添加客服监听：{}'.format(id))
         for id in self.writer_ids.keys():
             self.wx.AddListenChat(who=id)
-        Haperlog.logger.debug('添加聊天监听：{}'.format(id))
+            Haperlog.logger.debug('添加写手监听：{}'.format(id))
 
     def listen_and_forward(self):
         # 持续监听消息
@@ -282,4 +282,5 @@ t1.start()
 #t2.start()
 t3.start()
 
-consumer()
+if __name__ == '__main__':
+    consumer()
