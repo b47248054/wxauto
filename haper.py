@@ -1,6 +1,7 @@
 import time
 
-from haper.config import Config, Haperlog, BlockingQueue, CommandMessage
+from haper.config import Config, Haperlog, BlockingQueue
+from haper.message import CommandMessage
 from haper.order import Order, OrderListener
 from wxauto import WeChat
 import threading
@@ -35,6 +36,16 @@ class WechatMessageListener:
                             command_message = CommandMessage(None, i.sender, i.content, i.id, chat)
                             Haperlog.logger.debug(f'---Received message : {command_message}')
                             if command_message.command:
+                                # 查询消息是否为历史消息，如果是，则忽略
+                                if command_message.is_history_message():
+                                    Haperlog.logger.debug(f'---Ignore history message : {command_message}')
+                                    continue
+                                try:
+                                    # 保存消息到数据库
+                                    command_message.save_to_db()
+                                except Exception as e:
+                                    Haperlog.logger.exception(f'---Error listening message: {e}, {e}')
+
                                 Haperlog.logger.debug(f'---Dispatching message : {command_message}')
                                 self.message_queue.put(command_message)
             except Exception as e:
@@ -88,7 +99,7 @@ class CommandExecutor:
     def load_order(self, message):
         # 解析命令，提取引用的内容
         Haperlog.logger.debug(f'|---Loading order : {message.replace('\n', '')}')
-        order_id = message.split('【编号】')[1].split('\n')[0] # 获取订单号
+        order_id = message.split('【编号】')[1].split('\n')[0] # 获取订单号 todo: 如果编号不存在，则自动生成一个
         if order_listener.get_order(order_id):
             order = order_listener.get_order(order_id)
             return order
@@ -274,13 +285,13 @@ def consumer():
 def system_producer():
     order_listener.listen_and_forward()
 
-t1 = threading.Thread(target=producer)
-#t2 = threading.Thread(target=consumer)
+# t1 = threading.Thread(target=producer)
+t2 = threading.Thread(target=consumer)
 t3 = threading.Thread(target=system_producer)
 
-t1.start()
-#t2.start()
+# t1.start()
+t2.start()
 t3.start()
 
 if __name__ == '__main__':
-    consumer()
+    producer()

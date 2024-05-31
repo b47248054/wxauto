@@ -1,7 +1,8 @@
 import sqlite3
 import time
 from datetime import datetime
-from haper.config import Haperlog, CommandMessage
+from haper.config import Haperlog
+from haper.message import CommandMessage
 
 
 class Order:
@@ -233,7 +234,7 @@ class OrderListener:
             Haperlog.logger.debug(f'---Consumed message[{message_id}]')
 
 class OrderDataHandler:
-    def __init__(self, db_name='../db/orders.db'):
+    def __init__(self, db_name='../db/haper.db'):
         self.db_name = db_name
         self.create_table()
 

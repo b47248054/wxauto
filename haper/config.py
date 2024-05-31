@@ -18,39 +18,6 @@ from logging.handlers import TimedRotatingFileHandler
 #     LISTEN_WORKER_GROUP_CREATED = 3
 #     LISTEN_CUSTOMER_ADDED = 4
 
-class CommandMessage:
-
-    type = 'command'
-
-    def __init__(self, command: int, sender, content, message_id, chat):
-        self.sender = sender
-        self.sender_type = self.get_sender_type(sender)
-        self.content = content
-        self.message_id = message_id
-        self.chat = chat
-        self.command = self.parse_command(command)
-
-    def parse_command(self, command: int):
-        if command:
-            return command
-        # 解析命令，提取引用的内容
-        if self.content.startswith('1\n引用') or self.content.startswith('2\n引用') or self.content.startswith('3\n引用') or self.content.startswith('4\n引用') or self.content.startswith('5\n引用'):
-            return int(self.content.split('\n', 1)[0])
-        else:
-            return None
-
-    def get_sender_type(self, sender_id):
-        if sender_id in Config.customer_service_ids:
-            return '客服'
-        elif sender_id in Config.writer_ids.keys():
-            return '写手'
-        elif sender_id in Config.system_ids:
-            return '系统'
-        else:
-            return None
-
-    def __str__(self):
-        return f"CommandMessage(command={self.command}, sender={self.sender}[{self.sender_type}], content={self.content.replace('\n', '')}, message_id={self.message_id}, chat={self.chat})"
 
 class Config:
 
