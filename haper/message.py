@@ -6,15 +6,45 @@ from haper.config import Config
 
 class CommandMessage:
 
+    '''
+    command message example:
+    【编号】W99988
+    【年限】准研究生
+    【实付】150
+    【价格】150
+    【佣金】150
+    【交稿时间】2024/5/11 5小时内出
+    【专业、应聘岗位】人物形象
+    【旺旺】123
+    【微信】忠旭123哈哈哈
+    '''
+
     type = 'command'
 
     def __init__(self, command: int, sender, content, message_id, chat):
         self.sender = sender
         self.sender_type = self.get_sender_type(sender)
         self.content = content
+        self.json_content = self.parse_content()
         self.message_id = message_id
         self.chat = chat
         self.command = self.parse_command(command)
+
+    def parse_content(self):
+        # 解析消息模板
+        fields = {}
+        lines = self.content.split('\n')
+        for line in lines:
+            if '【' in line and '】' in line:
+                key_start = line.find('【') + 1
+                key_end = line.find('】')
+                value = line[key_end+1:].strip()
+                key = line[key_start:key_end]
+                fields[key] = value
+
+        # 转换为 JSON 对象
+        # json_object = json.dumps(fields, ensure_ascii=False, indent=4)
+        return fields
 
     def parse_command(self, command: int):
         if command:
@@ -86,7 +116,8 @@ class MessageDataHandler:
             ''', (message_id,))
             row = cursor.fetchone()
             if row:
-                return CommandMessage(row[1], row[2], row[3], row[4], row[5])
+                # (self, command: int, sender, content, message_id, chat):
+                return CommandMessage(None, row[2], row[4], row[1], None)
             else:
                 return None
 
@@ -99,5 +130,5 @@ class MessageDataHandler:
             rows = cursor.fetchall()
             messages = []
             for row in rows:
-                messages.append(CommandMessage(row[1], row[2], row[3], row[4], row[5]))
+                return CommandMessage(None, row[2], row[4], row[1], None)
             return messages
