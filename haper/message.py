@@ -17,6 +17,7 @@ class CommandMessage:
     【专业、应聘岗位】人物形象
     【旺旺】123
     【微信】忠旭123哈哈哈
+    【写手】张三
     '''
 
     type = 'command'

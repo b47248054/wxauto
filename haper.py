@@ -73,38 +73,38 @@ class CommandExecutor:
 
             time.sleep(1)
 
-    def save_or_update_order(self, message):
-        # 解析命令，提取引用的内容
-        Haperlog.logger.debug(f'|---Parsing order : {message.replace('\n', '')}')
-        order_id = message.split('【编号】')[1].split('\n')[0] # 获取订单号
-        order = order_listener.get_order(order_id)
-        update_detail = {'update': {'info': False, 'wechat_id': False}, 'create': False}
-        if order: # 更新订单
-            info = message.split('的消息 : ')[1].split('【微信】')[0]  # 获取订单消息，去除【微信】，用于发给写手
-            wechat_id = message.split('【微信】')[1].split('\n')[0] # 获取微信ID，客户id，用于加好友
-            if order.info != info:
-                order.set_info(info)
-                update_detail['update']['info'] = True
-            if order.wechat_id != wechat_id:
-                order.set_wechat_id(wechat_id)
-                update_detail['update']['wechat_id'] = True
-            return order, update_detail
-        else:
-            info = message.split('的消息 : ')[1].split('【微信】')[0]  # 获取订单消息，去除【微信】，用于发给写手
-            wechat_id = message.split('【微信】')[1].split('\n')[0] # 获取微信ID，客户id，用于加好友
-            order = Order(info, wechat_id, order_id)  # 创建订单对象
-            update_detail['create'] = True
-            return order, update_detail
-
-    def load_order(self, message):
-        # 解析命令，提取引用的内容
-        Haperlog.logger.debug(f'|---Loading order : {message.replace('\n', '')}')
-        order_id = message.split('【编号】')[1].split('\n')[0] # 获取订单号 todo: 如果编号不存在，则自动生成一个
-        if order_listener.get_order(order_id):
-            order = order_listener.get_order(order_id)
-            return order
-
-        return None
+    # def save_or_update_order(self, message):
+    #     # 解析命令，提取引用的内容
+    #     Haperlog.logger.debug(f'|---Parsing order : {message.replace('\n', '')}')
+    #     order_id = message.split('【编号】')[1].split('\n')[0] # 获取订单号
+    #     order = order_listener.get_order(order_id)
+    #     update_detail = {'update': {'info': False, 'wechat_id': False}, 'create': False}
+    #     if order: # 更新订单
+    #         info = message.split('的消息 : ')[1].split('【微信】')[0]  # 获取订单消息，去除【微信】，用于发给写手
+    #         wechat_id = message.split('【微信】')[1].split('\n')[0] # 获取微信ID，客户id，用于加好友
+    #         if order.info != info:
+    #             order.set_info(info)
+    #             update_detail['update']['info'] = True
+    #         if order.wechat_id != wechat_id:
+    #             order.set_wechat_id(wechat_id)
+    #             update_detail['update']['wechat_id'] = True
+    #         return order, update_detail
+    #     else:
+    #         info = message.split('的消息 : ')[1].split('【微信】')[0]  # 获取订单消息，去除【微信】，用于发给写手
+    #         wechat_id = message.split('【微信】')[1].split('\n')[0] # 获取微信ID，客户id，用于加好友
+    #         order = Order(info, wechat_id, order_id)  # 创建订单对象
+    #         update_detail['create'] = True
+    #         return order, update_detail
+    #
+    # def load_order(self, message):
+    #     # 解析命令，提取引用的内容
+    #     Haperlog.logger.debug(f'|---Loading order : {message.replace('\n', '')}')
+    #     order_id = message.split('【编号】')[1].split('\n')[0] # 获取订单号 todo: 如果编号不存在，则自动生成一个
+    #     if order_listener.get_order(order_id):
+    #         order = order_listener.get_order(order_id)
+    #         return order
+    #
+    #     return None
 
     def execute_command(self, command_message, order_listener):
         command = command_message.command
@@ -112,17 +112,16 @@ class CommandExecutor:
         sender_type = command_message.sender_type
         message = command_message.content
         chat = command_message.chat
-        order = self.load_order(message)
 
         if sender_type == '客服':
-            order, update_detail = self.save_or_update_order(message)
-            Haperlog.logger.debug(f'|---Order update_detail : {update_detail}')
-            # 监听订单
-            order_listener.add(command_message=command_message, order=order)
-
             if command == 1: # 派单，给写手发消息，加客户微信,可重复发单
-                if update_detail['create'] or update_detail['update']['info']:
-                    dispatch_count, dispatch_records = self.dispatch_order(order, update_detail['update']['info'])
+                # 监听订单
+                order = Order(command_message)
+                if order_listener.add(command_message=command_message, order=order) is False:
+                    chat.SendMsg(f'{order.order_id}，您已经派单过了，请不要重复派单')
+                    Haperlog.logger.info(f'|---to {chat} msg : {order.order_id}，您已经派单过了，请不要重复派单')
+                else:
+                    dispatch_count, dispatch_records = self.dispatch_order(order)
                     if dispatch_count > 0:
                         chat.SendMsg(f'{order.order_id}已派单给【{dispatch_records}】\n等待写手接单')
                         Haperlog.logger.info(f'|---to {chat} msg : {order.order_id}已派单给【{dispatch_records}】等待写手接单')
@@ -130,7 +129,6 @@ class CommandExecutor:
                         chat.SendMsg(f'{order.order_id}无可用写手，请手动派单！！！')
                         Haperlog.logger.info(f'|---to {chat} msg : {order.order_id}无可用写手，请手动派单！！！')
 
-                if update_detail['create'] or update_detail['update']['wechat_id']:
                     add_res = self.add_customer_wechat(order.wechat_id, order.order_id)
                     if '已存在' == add_res:
                         order.set_customer_added()
@@ -145,6 +143,7 @@ class CommandExecutor:
                         Haperlog.logger.info(f'|---to {chat} msg : {order.order_id}，客户微信【{add_res}】')
 
         elif sender_type == '写手':
+            order = order_listener.get_order(command_message)
             if command == 1:
                 if not order:
                     chat.SendMsg(f'单子已经发出去了，老师后面有其他单子在给您发')
@@ -160,6 +159,7 @@ class CommandExecutor:
                     Haperlog.logger.info(f'|---to {chat} msg : {order.order_id}已经发出去了，老师后面有其他单子在给您发')
 
         elif sender_type == '系统':
+            order = order_listener.get_order(command_message)
             # 系统的命令执行逻辑
             if command == 1 and order.status['customer_added'] is False: # 监听好友是否添加成功
                 Haperlog.logger.debug(f'|---Checking if customer {order} has been added to friends')
@@ -222,7 +222,7 @@ class CommandExecutor:
         self.wx.SwitchToChat()
         return res
 
-    def dispatch_order(self, order, update_info=False):
+    def dispatch_order(self, order):
         Haperlog.logger.debug(f'|---Dispatched order: {order}')
         # 发单数量
         count = 0
@@ -230,26 +230,23 @@ class CommandExecutor:
         dispatch_records = []
         # 已有人接单情况
         if order.status['worker_assigned'] is True:
-            if update_info:
-                self.wx.SendMsg(f'{order.info}\n老师，订单以这个为准。刚更新了信息。', order.worker)
-                Haperlog.logger.info(f'|---to {order.worker} msg : {order.info.replace('\n', '')}\n老师，订单以这个为准。刚更新了信息。')
-                count += 1
-                dispatch_records.append(order.worker)
-                return count, dispatch_records
-            else:
-                return count, dispatch_records
+            self.wx.SendMsg(f'{order.info}\n老师，订单以这个为准。', order.worker)
+            Haperlog.logger.info(f'|---to {order.worker} msg : {order.info.replace('\n', '')}\n老师，订单以这个为准。')
+            count += 1
+            dispatch_records.append(order.worker)
+            return count, dispatch_records
 
         # 无人接单的情况下，给所有写手，发送消息
         for writer_id, value in self.writer_ids.items():
             if value['status'] == '在线':
                 count += 1
                 dispatch_records.append(writer_id)
-                if update_info:
-                    self.wx.SendMsg(f'{order.info}\n老师接单吗？以这个为准。接单请引用订单信息，并回复【1】', writer_id)
-                    Haperlog.logger.info(f'|---to {writer_id} msg : {order.info.replace('\n', '')}\n老师接单吗？以这个为准。接单请引用订单信息，并回复【1】')
-                else:
-                    self.wx.SendMsg(f'{order.info}\n老师接单吗？接单请引用订单信息，并回复【1】', writer_id)
-                    Haperlog.logger.info(f'|---to {writer_id} msg : {order.info.replace('\n', '')}\n老师接单吗？接单请引用订单信息，并回复【1】')
+                # if update_info:
+                #     self.wx.SendMsg(f'{order.info}\n老师接单吗？以这个为准。接单请引用订单信息，并回复【1】', writer_id)
+                #     Haperlog.logger.info(f'|---to {writer_id} msg : {order.info.replace('\n', '')}\n老师接单吗？以这个为准。接单请引用订单信息，并回复【1】')
+                # else:
+                self.wx.SendMsg(f'{order.info}\n老师接单吗？接单请引用订单信息，并回复【1】', writer_id)
+                Haperlog.logger.info(f'|---to {writer_id} msg : {order.info.replace('\n', '')}\n老师接单吗？接单请引用订单信息，并回复【1】')
 
         return count, dispatch_records
 

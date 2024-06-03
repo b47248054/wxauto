@@ -1,3 +1,4 @@
+import json
 import sqlite3
 import time
 from datetime import datetime
@@ -6,49 +7,57 @@ from haper.message import CommandMessage
 
 
 class Order:
-    def __init__(self, info, wechat_id, order_id):
-        self.info = info  # 订单消息，去除【微信】，用于发给写手
-        self.wechat_id = wechat_id  # 微信ID
-        self.order_id = order_id  # 订单ID
-        self.worker = None  # 订单分配的写手
+    def __init__(self, command_message):
+        self.order_id = command_message.json_content.get('编号')
+        self.message_id = command_message.message_id
+
+        # 去除特定字段及其所在的行
+        fields_to_remove = ["【微信】", "【实付】", "【写手】", "【旺旺】"]
+
+        filtered_message = command_message.content.split('的消息 : ')[1]
+        for field in fields_to_remove:
+            filtered_message = '\n'.join([line for line in filtered_message.split('\n') if field not in line])
+
+        self.info = filtered_message # 订单消息，去除【微信】【实付】【写手】【旺旺】，用于发给写手
+        self.wechat_id = command_message.json_content.get('微信')
+        self.worker = command_message.json_content.get('写手')
         self.create_time = round(time.time())  # 订单创建时间
+        self.work_time = None  # 开始工作时间
         self.finish_time = None  # 订单完成时间
-        self.settlement_price = None  # 订单结算价格
-        self.commission = None  # 订单佣金
-        self.evaluation = 1 # 5_star, 4_star, 1_star, refund （3图好评 5、好评 3、差评 0、退款 0）
+        self.evaluation = 0 # 5_star, 4_star, 1_star, refund （3图好评 5、好评 3、差评 0、退款 0）
         self.status = {
             'customer_added': False,  # 客户是否已添加
-            'worker_assigned': False,  # 订单是否已分配给写手
+            'worker_assigned': False if not self.worker else True,  # 订单是否已分配给写手
             'work_group_created': False,  # 群是否已创建
         }
-        self.recalculate_commission()
+        self.command_message_data = command_message.json_content
 
     # 重新计算订单佣金
-    def recalculate_commission(self):
-        try:
-            # 提取结算价格和佣金的字符串
-            settlement_price_text = self.info.split('【价格】')
-            commission_text = self.info.split('【佣金】')
-
-            # 转换为数字并保留两位小数
-            if len(settlement_price_text) > 1:
-                settlement_price_str = settlement_price_text[1].split('\n')[0]
-                self.settlement_price = round(float(settlement_price_str), 2)
-                self.commission = round(self.settlement_price * 0.3, 2)
-            else:
-                self.settlement_price = None
-
-            if len(commission_text) > 1:
-                commission_str = commission_text[1].split('\n')[0]
-                self.commission = round(float(commission_str), 2)
-            else:
-                self.commission = round(self.settlement_price * 0.3, 2)
-        except Exception as e:
-            Haperlog.logger.exception(f'---Error occurred while recalculate_commission order: {self.order_id} . Error: {e}', {e})
-
-    def set_info(self, info):
-        self.info = info
-        self.recalculate_commission()
+    # def recalculate_commission(self):
+    #     try:
+    #         # 提取结算价格和佣金的字符串
+    #         settlement_price_text = self.info.split('【价格】')
+    #         commission_text = self.info.split('【佣金】')
+    #
+    #         # 转换为数字并保留两位小数
+    #         if len(settlement_price_text) > 1:
+    #             settlement_price_str = settlement_price_text[1].split('\n')[0]
+    #             self.settlement_price = round(float(settlement_price_str), 2)
+    #             self.commission = round(self.settlement_price * 0.3, 2)
+    #         else:
+    #             self.settlement_price = None
+    #
+    #         if len(commission_text) > 1:
+    #             commission_str = commission_text[1].split('\n')[0]
+    #             self.commission = round(float(commission_str), 2)
+    #         else:
+    #             self.commission = round(self.settlement_price * 0.3, 2)
+    #     except Exception as e:
+    #         Haperlog.logger.exception(f'---Error occurred while recalculate_commission order: {self.order_id} . Error: {e}', {e})
+    #
+    # def set_info(self, info):
+    #     self.info = info
+    #     self.recalculate_commission()
 
     def set_wechat_id(self, wechat_id):
         self.wechat_id = wechat_id
@@ -83,6 +92,11 @@ class OrderListener:
     def add(self, command_message, order):
         # command_message = CommandMessage(command=None, sender=i.sender, content=i.content, message_id=i.message_id, wechat=chat)
         # command_message = CommandMessage(None, i.sender, i.content, i.id, chat)
+        # 如果订单已存在，则返回false
+        if order.order_id in self.order_info:
+            return False
+
+        # 保存订单信息
         self.order_info[order.order_id] = {
             'command_message': command_message,
             'order': order,
@@ -95,18 +109,19 @@ class OrderListener:
         }
         try:
             order_data_handler = OrderDataHandler()
-            order_data_handler.save_or_update_order(order)
+            order_data_handler.insert_order(order)
         except Exception as e:
             Haperlog.logger.exception(f'---Error occurred while save_or_update_order : {order} . Error: {e}', {e})
 
         Haperlog.logger.debug(f'Added to OrderListener : {self.order_info[order.order_id]}.')
+        return True
 
     def listen_and_forward(self):
         wait = 15  # 设置15秒查看一次
         while True:
             time.sleep(wait)
             for order_id, order_info in self.order_info.items():
-                if order_info['order'].finish_time is None:  # 订单未完成，则监听
+                if order_info['order'].work_time is None:  # 订单未完成，则监听
                     Haperlog.logger.debug(f'---Checking order start: {order_info['order']} .')
                     try:
                         # 判断好友申请是否通过，每15秒检查一次
@@ -139,9 +154,9 @@ class OrderListener:
         # 如果订单已完成，则从order_list中删除该订单
         if all(order_status.values()):
             try:
+                order_info['order'].work_time = round(time.time())
                 order_data_handler = OrderDataHandler()
-                order_info['order'].finish_time = round(time.time())
-                order_data_handler.save_or_update_order(order_info['order'])
+                order_data_handler.update_order(order_info['order'])
                 Haperlog.logger.debug(f'---Order completed: {order_info["order"]}')
                 # del self.order_info[order_info['order'].order_id]
             except Exception as e:
@@ -174,7 +189,7 @@ class OrderListener:
     def check_if_action_needed(self, order_info, action_type):
         current_time = round(time.time())
 
-        if action_type == 'only_check':
+        if action_type == 'only_check' and order_info['order'].wechat_id:
             return True  # 时间不用判断，直接返回True
 
         if action_type == 'create_group':
@@ -206,7 +221,8 @@ class OrderListener:
                 return True
         return False
 
-    def get_order(self, order_id):
+    def get_order(self, command_message):
+        order_id = command_message.json_content.get('编号')
         # 从order_list中获取订单信息
         if order_id not in self.order_info:
             return None
@@ -242,57 +258,84 @@ class OrderDataHandler:
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()
             cursor.execute('''
-                CREATE TABLE IF NOT EXISTS order_info (
+                CREATE TABLE IF NOT EXISTS orders (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     order_id VARCHAR(50),
+                    message_id VARCHAR(50),  
                     worker_id VARCHAR(50),
                     wechat_id VARCHAR(50),
                     info VARCHAR(1000),
+                    command_message_data TEXT,
                     create_time INTEGER,
+                    work_time INTEGER,  -- 新增字段用于记录开工时间
                     finish_time INTEGER,
-                    settlement_price DECIMAL(10, 2),
-                    commission DECIMAL(10, 2),
-                    evaluation INTEGER
+                    evaluation INTEGER,
+                    customer_added INTEGER,
+                    worker_assigned INTEGER,
+                    work_group_created INTEGER
                 );
             ''')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_order_id ON order_info (order_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_worker_id ON order_info (worker_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_create_time ON order_info (create_time)')
 
-    def save_or_update_order(self, order_entity):
+    def insert_order(self, order):
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO orders 
+                (order_id, message_id, worker_id, wechat_id, info, command_message_data, create_time, work_time, evaluation, customer_added, worker_assigned, work_group_created) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (order.order_id, order.message_id, order.worker, order.wechat_id, order.info, json.dumps(order.command_message_data), order.create_time, order.work_time, order.evaluation, order.status['customer_added'], order.status['worker_assigned'], order.status['work_group_created']))
 
-            cursor.execute("SELECT * FROM order_info WHERE order_id = ?", (order_entity.order_id,))
-            existing_order = cursor.fetchone()
+    def update_order(self, order):
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                UPDATE orders
+                SET 
+                    message_id = ?,
+                    worker_id = ?,
+                    wechat_id = ?,
+                    info = ?,
+                    command_message_data = ?,
+                    create_time = ?,
+                    work_time = ?,
+                    finish_time = ?,
+                    evaluation = ?,
+                    customer_added = ?,
+                    worker_assigned = ?,
+                    work_group_created = ?
+                WHERE order_id = ?
+            ''', (order.message_id, order.worker, order.wechat_id, order.info, json.dumps(order.command_message_data), order.create_time, order.work_time, order.finish_time, order.evaluation, int(order.status['customer_added']), int(order.status['worker_assigned']), int(order.status['work_group_created']), order.order_id))
 
-            if existing_order:
-                cursor.execute('''
-                    UPDATE order_info 
-                    SET worker_id=?, wechat_id=?, info=?, finish_time=?, settlement_price=?, commission=?, evaluation=?
-                    WHERE order_id=?
-                    ''', (order_entity.worker, order_entity.wechat_id, order_entity.info, order_entity.finish_time, order_entity.settlement_price, order_entity.commission, order_entity.evaluation, order_entity.order_id))
-            else:
-                cursor.execute('''
-                    INSERT INTO order_info (order_id, worker_id, wechat_id, info, create_time, finish_time, settlement_price, commission, evaluation) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (order_entity.order_id, order_entity.worker, order_entity.wechat_id, order_entity.info, order_entity.create_time, order_entity.finish_time, order_entity.settlement_price, order_entity.commission, order_entity.evaluation))
-
+    def get_order_by_id(self, order_id):
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT * FROM orders 
+                WHERE order_id = ?
+            ''', (order_id,))
+            return cursor.fetchone()
 
     def get_order_data(self):
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()
-            cursor.execute('SELECT * FROM order_info ORDER BY id DESC')
+            cursor.execute('SELECT * FROM orders ORDER BY id DESC')
             data = cursor.fetchall()
             orders_data = [{
                 'order_id': row[1],
-                'worker_id': row[2],
-                'wechat_id': row[3],
-                'info': row[4],
-                'create_time': datetime.fromtimestamp(row[5]).strftime('%Y-%m-%d %H:%M:%S') if row[5] else None,
-                'finish_time': datetime.fromtimestamp(row[6]).strftime('%Y-%m-%d %H:%M:%S') if row[6] else None,
-                'settlement_price': row[7],
-                'commission': row[8],
-                'evaluation': row[9]
+                'message_id': row[2],
+                'worker_id': row[3],
+                'wechat_id': row[4],
+                'info': row[5],
+                'command_message_data': json.loads(row[6]) if row[6] else None,
+                'create_time': datetime.fromtimestamp(row[7]).strftime('%Y-%m-%d %H:%M:%S') if row[7] else None,
+                'work_time': datetime.fromtimestamp(row[8]).strftime('%Y-%m-%d %H:%M:%S') if row[8] else None,
+                'finish_time': datetime.fromtimestamp(row[9]).strftime('%Y-%m-%d %H:%M:%S') if row[9] else None,
+                'evaluation': row[10],
+                'customer_added': bool(row[11]),
+                'worker_assigned': bool(row[12]),
+                'work_group_created': bool(row[13])
             } for row in data]
             return orders_data
