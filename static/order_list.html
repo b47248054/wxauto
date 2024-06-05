@@ -31,13 +31,15 @@
     <tr>
         <th>序号</th>
         <th>订单ID</th>
-        <th>写手ID</th>
+        <th>接单人</th>
         <th>订单信息</th>
         <th>派单时间</th>
         <th>拉群时间</th>
-        <th>结算价格</th>
+        <th>指定交稿时间</th>
+        <th>定稿时间</th>
+        <th>实付</th>
         <th>佣金</th>
-        <th>评价退款</th>
+        <th>评价</th>
     </tr>
 </table>
 <div>
@@ -45,49 +47,83 @@
     <p>总佣金： <span id="totalCommission"></span></p>
 </div>
 <script>
-    // 使用 AJAX 技术向服务器获取订单数据
-    var xhttp = new XMLHttpRequest();
-    xhttp.onreadystatechange = function() {
-        if (this.readyState == 4 && this.status == 200) {
-            var orders = JSON.parse(this.responseText);
-            var select = document.getElementById("writerId");
-            var table = document.getElementById("orderTable");
-            var writerIds = [];  // 用于存储写手ID，避免重复
-            var count = 1; // 定义序号变量，初始值为1
-            orders.forEach(function(order) {
-                if (!writerIds.includes(order.worker_id)) {
-                    writerIds.push(order.worker_id);
-                    var option = document.createElement("option");
-                    option.value = order.worker_id;
-                    option.text = order.worker_id;
-                    select.appendChild(option);
-                }
-
-                var row = table.insertRow(-1);
-                var cell0 = row.insertCell(0); // 插入序号单元格
-                var cell1 = row.insertCell(1);
-                var cell2 = row.insertCell(2);
-                var cell3 = row.insertCell(3);
-                var cell4 = row.insertCell(4);
-                var cell5 = row.insertCell(5);
-                var cell6 = row.insertCell(6);
-                var cell7 = row.insertCell(7);
-                var cell8 = row.insertCell(8);
-                cell0.innerHTML = count; // 设置序号
-                cell1.innerHTML = order.order_id;
-                cell2.innerHTML = order.worker_id;
-                cell3.innerHTML = order.info;
-                cell4.innerHTML = order.create_time;
-                cell5.innerHTML = order.finish_time;
-                cell6.innerHTML = order.settlement_price;
-                cell7.innerHTML = order.commission;
-                cell8.innerHTML = order.evaluation;
-                count++; // 递增序号
-            });
+    // 从Cookie中获取JWT令牌的函数
+    function getJwtTokenFromCookie(cookieName) {
+        const name = cookieName + "=";
+        const decodedCookie = decodeURIComponent(document.cookie);
+        const cookieArray = decodedCookie.split(';');
+        for (let i = 0; i < cookieArray.length; i++) {
+            let cookie = cookieArray[i];
+            while (cookie.charAt(0) == ' ') {
+                cookie = cookie.substring(1);
+            }
+            if (cookie.indexOf(name) == 0) {
+                return cookie.substring(name.length, cookie.length);
+            }
         }
-    };
-    xhttp.open("GET", "order_data", true);  //假设"/getOrders"是获取订单数据的API路径
-    xhttp.send();
+        return "";
+    }
+
+    // 从cookie中获取token
+    var token = getJwtTokenFromCookie("jwtToken");
+    if (!token) {
+        window.location.href = "/login.html";
+    } else {
+        // 获取订单数据并显示在表格中
+        fetch('/order_data', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                var orders = data.orders_data;
+                var select = document.getElementById("writerId");
+                var table = document.getElementById("orderTable");
+                var writerIds = [];  // 用于存储写手ID，避免重复
+                var count = 1; // 定义序号变量，初始值为1
+                orders.forEach(function(order) {
+                    if (!writerIds.includes(order.worker_id)) {
+                        writerIds.push(order.worker_id);
+                        var option = document.createElement("option");
+                        option.value = order.worker_id;
+                        option.text = order.worker_id;
+                        select.appendChild(option);
+                    }
+
+                    var row = table.insertRow(-1);
+                    var cell0 = row.insertCell(0); // 插入序号单元格
+                    var cell1 = row.insertCell(1);
+                    var cell2 = row.insertCell(2);
+                    var cell3 = row.insertCell(3);
+                    var cell4 = row.insertCell(4);
+                    var cell5 = row.insertCell(5);
+                    var cell6 = row.insertCell(6);
+                    var cell7 = row.insertCell(7);
+                    var cell8 = row.insertCell(8);
+                    var cell9 = row.insertCell(9);
+                    var cell10 = row.insertCell(10);
+                    cell0.innerHTML = count; // 设置序号
+                    cell1.innerHTML = order.order_id;
+                    cell2.innerHTML = order.worker_id;
+                    cell3.innerHTML = order.info;
+                    cell4.innerHTML = order.create_time;
+                    cell5.innerHTML = order.work_time;
+                    cell6.innerHTML = order.command_message_data.交稿时间 !== undefined ? order.command_message_data.交稿时间 : '';
+                    cell7.innerHTML = order.finish_time;
+                    cell8.innerHTML = order.command_message_data.实付 !== undefined ? order.command_message_data.实付 : 0;
+                    cell9.innerHTML = order.command_message_data.佣金 !== undefined ? order.command_message_data.佣金 : 0;
+                    cell10.innerHTML = order.evaluation;
+                    count++; // 递增序号
+                });
+            }
+        });
+    }
+
+
 
     // 添加筛选和汇总功能
     function filterByWriterId() {
