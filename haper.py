@@ -21,6 +21,9 @@ class WechatMessageListener:
         for id in self.writer_ids.keys():
             self.wx.AddListenChat(who=id)
             Haperlog.logger.debug('添加写手监听：{}'.format(id))
+        for id in Config.writer_group_id:
+            self.wx.AddListenChat(who=id)
+            Haperlog.logger.debug('添加派单群监听：{}'.format(id))
 
     def listen_and_forward(self):
         # 持续监听消息
@@ -121,7 +124,7 @@ class CommandExecutor:
                     chat.SendMsg(f'{order.order_id}，您已经派单过了，请不要重复派单')
                     Haperlog.logger.info(f'|---to {chat} msg : {order.order_id}，您已经派单过了，请不要重复派单')
                 else:
-                    dispatch_count, dispatch_records = self.dispatch_order(order)
+                    dispatch_count, dispatch_records = self.dispatch_order_group(order)
                     if dispatch_count > 0:
                         chat.SendMsg(f'{order.order_id}已派单给【{dispatch_records}】\n等待写手接单')
                         Haperlog.logger.info(f'|---to {chat} msg : {order.order_id}已派单给【{dispatch_records}】等待写手接单')
@@ -157,6 +160,22 @@ class CommandExecutor:
                 else:
                     chat.SendMsg(f'{order.order_id}已经发出去了，老师后面有其他单子在给您发')
                     Haperlog.logger.info(f'|---to {chat} msg : {order.order_id}已经发出去了，老师后面有其他单子在给您发')
+
+        elif sender_type == '写手群':
+            order = order_listener.get_order(command_message)
+            if command == 1:
+                if not order:
+                    chat.SendMsg(f'单子已经发出去了，老师后面有其他单子在给您发', at=sender)
+                    Haperlog.logger.info(f'|---to {chat} msg : @{sender}，单子已经发出去了，老师后面有其他单子在给您发')
+                elif self.accept_order(sender, order):
+                    chat.SendMsg(f'{order.order_id}接单成功，请稍等拉群', at=sender)
+                    Haperlog.logger.info(f'|---to {chat} msg : @{sender}，{order.order_id}接单成功，请稍等拉群')
+                elif order.worker == sender:
+                    chat.SendMsg(f'{order.order_id}您已经接过单了，请不要重复接单', at=sender)
+                    Haperlog.logger.info(f'|---to {chat} msg : @{sender}，{order.order_id}您已经接过单了，请不要重复接单')
+                else:
+                    chat.SendMsg(f'{order.order_id}已经发出去了，老师后面有其他单子在给您发', at=sender)
+                    Haperlog.logger.info(f'|---to {chat} msg : @{sender}，{order.order_id}已经发出去了，老师后面有其他单子在给您发')
 
         elif sender_type == '系统':
             order = order_listener.get_order(command_message)
@@ -222,6 +241,21 @@ class CommandExecutor:
         self.wx.SwitchToChat()
         return res
 
+    # 优先在派单群里发单
+    def dispatch_order_group(self, order):
+        Haperlog.logger.debug(f'|---Dispatched order: {order}')
+        # 发单数量
+        count = 0
+        # 发单记录
+        dispatch_records = []
+        # 优先在派单群里发单
+        for writer_id in Config.writer_group_id:
+            self.wx.SendMsg(f'{order.info}\n老师接单吗？接单请引用订单信息，并回复【1】', writer_id)
+            Haperlog.logger.info(f'|---to {writer_id} msg : {order.info.replace('\n', '')}\n老师接单吗？接单请引用订单信息，并回复【1】')
+            count += 1
+            dispatch_records.append(writer_id)
+        return count, dispatch_records
+
     def dispatch_order(self, order):
         Haperlog.logger.debug(f'|---Dispatched order: {order}')
         # 发单数量
@@ -284,11 +318,11 @@ def system_producer():
 
 # t1 = threading.Thread(target=producer)
 t2 = threading.Thread(target=consumer)
-t3 = threading.Thread(target=system_producer)
+#t3 = threading.Thread(target=system_producer)
 
 # t1.start()
 t2.start()
-t3.start()
+#t3.start()
 
 if __name__ == '__main__':
     producer()

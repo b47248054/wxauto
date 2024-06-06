@@ -225,7 +225,11 @@ class OrderListener:
         order_id = command_message.json_content.get('编号')
         # 从order_list中获取订单信息
         if order_id not in self.order_info:
-            return None
+            order_data_handler = OrderDataHandler()
+            order = order_data_handler.get_order_by_id(order_id, Order(command_message))
+            if order:
+                self.add(command_message, order)
+            return order
         # 如果存在则返回订单信息
         return self.order_info[order_id]['order']
 
@@ -309,14 +313,31 @@ class OrderDataHandler:
                 WHERE order_id = ?
             ''', (order.message_id, order.worker, order.wechat_id, order.info, json.dumps(order.command_message_data), order.create_time, order.work_time, order.finish_time, order.evaluation, int(order.status['customer_added']), int(order.status['worker_assigned']), int(order.status['work_group_created']), order.order_id))
 
-    def get_order_by_id(self, order_id):
+    def get_order_by_id(self, order_id, order):
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()
             cursor.execute('''
                 SELECT * FROM orders 
                 WHERE order_id = ?
             ''', (order_id,))
-            return cursor.fetchone()
+            row = cursor.fetchone()
+            if row:  # 如果查询结果不为空
+                order.order_id = row[1]
+                order.message_id = row[2]
+                order.worker = row[3]
+                order.wechat_id = row[4]
+                order.info = row[5]
+                order.command_message_data = json.loads(row[6]) if row[6] else None
+                order.create_time = row[7]
+                order.work_time = row[8]
+                order.finish_time = row[9]
+                order.evaluation = row[10]
+                order.status['customer_added'] = bool(row[11])
+                order.status['worker_assigned'] = bool(row[12])
+                order.status['work_group_created'] = bool(row[13])
+                return order
+            else:
+                return None
 
     def get_order_data(self):
         with sqlite3.connect(self.db_name) as conn:

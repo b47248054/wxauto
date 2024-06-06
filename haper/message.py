@@ -1,3 +1,4 @@
+import hashlib
 import sqlite3
 from datetime import datetime
 
@@ -24,12 +25,18 @@ class CommandMessage:
 
     def __init__(self, command: int, sender, content, message_id, chat):
         self.sender = sender
-        self.sender_type = self.get_sender_type(sender)
+        self.sender_type = self.get_sender_type(sender, chat)
         self.content = content
         self.json_content = self.parse_content()
-        self.message_id = message_id
+        self.message_id = self.generate_message_id(sender, content)
         self.chat = chat
         self.command = self.parse_command(command)
+
+    def generate_message_id(self, sender, content):
+        sender_hash = int(hashlib.sha256(sender.encode()).hexdigest(), 16)
+        content_hash = int(hashlib.sha256(content.encode()).hexdigest(), 16)
+        message_id = (sender_hash * content_hash) % (2**31 - 1)  # 取模以确保在SQLite整数类型的范围内
+        return message_id
 
     def parse_content(self):
         # 解析消息模板
@@ -56,9 +63,11 @@ class CommandMessage:
         else:
             return None
 
-    def get_sender_type(self, sender_id):
+    def get_sender_type(self, sender_id, chat):
         if sender_id in Config.customer_service_ids:
             return '客服'
+        elif chat.who in Config.writer_group_id:
+            return '写手群'
         elif sender_id in Config.writer_ids.keys():
             return '写手'
         elif sender_id in Config.system_ids:
@@ -68,8 +77,8 @@ class CommandMessage:
 
     def is_history_message(self):
         mdh = MessageDataHandler()
-        message = mdh.get_message_by_id(self.message_id)
-        if message:
+        message = mdh.count_message_by_id(self.message_id)
+        if message > 0:
             return True
         else:
             return False
@@ -108,6 +117,18 @@ class MessageDataHandler:
                 INSERT INTO receive_msgs (message_id, sender_id, sender_type, content, receive_time)
                 VALUES (?,?,?,?,?)
             ''', (message.message_id, message.sender, message.sender_type, message.content, int(datetime.now().timestamp())))
+
+    def count_message_by_id(self, message_id):
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT COUNT(*) FROM receive_msgs WHERE message_id =?
+            ''', (message_id,))
+            row = cursor.fetchone()
+            if row:
+                return row[0]
+            else:
+                return 0
 
     def get_message_by_id(self, message_id):
         with sqlite3.connect(self.db_name) as conn:

@@ -22,11 +22,11 @@ from logging.handlers import TimedRotatingFileHandler
 class Config:
 
     # 客服账号
-    customer_service_ids = ['忠旭']
+    customer_service_ids = ['文件传输助手']
     # 写手账号
     writer_ids = {'【W99999】接单测试群': {'status': '在线'}}
     # 写手接单群
-    writer_group_id = '【W99999】接单测试群'
+    writer_group_id = ['【W99999】接单测试群']
     # 系统账号
     system_ids = ['SYS']
     # 发送话术
