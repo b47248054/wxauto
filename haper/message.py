@@ -32,13 +32,13 @@ class CommandMessage:
         self.chat = chat
         self.command = self.parse_command(command)
         self.receive_time = int(datetime.now().timestamp())
-        self.execute_status = {
-            'customer_added': {'status': False, 'added_time': None, 'notified': False, 'silence_time': 600, 'last_action_time': self.receive_time, 'time_interval': 300, 'executed_times': 0, 'max_execution_times': 2},  # 客户是否已添加
-            'worker_assigned': {'status': False, 'assigned_time': None, 'notified': False, 'silence_time': 600, 'last_action_time': self.receive_time, 'time_interval': 300, 'executed_times': 0, 'max_execution_times': 2},  # 订单是否已分配给写手
-            'work_group_created': {'status': False, 'created_time': None},  # 群是否已创建
-            'evaluation': 0,  # 评价
-            'refound': 0  # 退款
-        }
+        # self.execute_status = {
+        #     'customer_added': {'status': False, 'added_time': None, 'notified': False, 'silence_time': 600, 'last_action_time': self.receive_time, 'time_interval': 300, 'executed_times': 0, 'max_execution_times': 2},  # 客户是否已添加
+        #     'worker_assigned': {'status': False, 'assigned_time': None, 'notified': False, 'silence_time': 600, 'last_action_time': self.receive_time, 'time_interval': 300, 'executed_times': 0, 'max_execution_times': 2},  # 订单是否已分配给写手
+        #     'work_group_created': {'status': False, 'created_time': None},  # 群是否已创建
+        #     'evaluation': 0,  # 评价
+        #     'refound': 0  # 退款
+        # }
 
     def generate_message_id(self, sender, content):
         sender_hash = int(hashlib.sha256(sender.encode()).hexdigest(), 16)

@@ -117,14 +117,18 @@ class CommandExecutor:
         chat = command_message.chat
 
         if sender_type == '客服':
-            if command == 1: # 派单，给写手发消息，加客户微信,可重复发单
+            if command == 1 or command == 2: # 派单，给写手发消息，加客户微信,可重复发单
                 # 监听订单
                 order = Order(command_message)
                 if order_listener.add(command_message=command_message, order=order) is False:
                     chat.SendMsg(f'{order.order_id}，您已经派单过了，请不要重复派单')
                     Haperlog.logger.info(f'|---to {chat} msg : {order.order_id}，您已经派单过了，请不要重复派单')
                 else:
-                    dispatch_count, dispatch_records = self.dispatch_order_group(order)
+                    if command == 1: # 派单
+                        dispatch_count, dispatch_records = self.dispatch_order(order)
+                    else: # 群派单
+                        dispatch_count, dispatch_records = self.dispatch_order_group(order)
+
                     if dispatch_count > 0:
                         chat.SendMsg(f'{order.order_id}已派单给【{dispatch_records}】\n等待写手接单')
                         Haperlog.logger.info(f'|---to {chat} msg : {order.order_id}已派单给【{dispatch_records}】等待写手接单')
@@ -248,12 +252,20 @@ class CommandExecutor:
         count = 0
         # 发单记录
         dispatch_records = []
-        # 优先在派单群里发单
-        for writer_id in Config.writer_group_id:
-            self.wx.SendMsg(f'{order.info}\n老师接单吗？接单请引用订单信息，并回复【1】', writer_id)
-            Haperlog.logger.info(f'|---to {writer_id} msg : {order.info.replace('\n', '')}\n老师接单吗？接单请引用订单信息，并回复【1】')
+        # 已有人接单情况
+        if order.status['worker_assigned'] is True:
+            self.wx.SendMsg(f'{order.info}\n老师，订单以这个为准。', order.worker)
+            Haperlog.logger.info(f'|---to {order.worker} msg : {order.info.replace('\n', '')}\n老师，订单以这个为准。')
             count += 1
-            dispatch_records.append(writer_id)
+            dispatch_records.append(order.worker)
+            return count, dispatch_records
+
+        # 优先在派单群里发单
+        for group_id in Config.writer_group_id:
+            self.wx.SendMsg(f'{order.info}\n老师接单吗？接单请引用订单信息，并回复【1】', group_id)
+            Haperlog.logger.info(f'|---to {group_id} msg : {order.info.replace('\n', '')}\n老师接单吗？接单请引用订单信息，并回复【1】')
+            count += 1
+            dispatch_records.append(group_id)
         return count, dispatch_records
 
     def dispatch_order(self, order):
