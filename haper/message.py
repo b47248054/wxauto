@@ -3,6 +3,7 @@ import sqlite3
 from datetime import datetime
 
 from haper.config import Config
+from haper.order import OrderDataHandler
 
 
 class CommandMessage:
@@ -32,6 +33,7 @@ class CommandMessage:
         self.chat = chat
         self.command = self.parse_command(command)
         self.receive_time = int(datetime.now().timestamp())
+        self.order_id = self.json_content.json_content.get('编号')
         # self.execute_status = {
         #     'customer_added': {'status': False, 'added_time': None, 'notified': False, 'silence_time': 600, 'last_action_time': self.receive_time, 'time_interval': 300, 'executed_times': 0, 'max_execution_times': 2},  # 客户是否已添加
         #     'worker_assigned': {'status': False, 'assigned_time': None, 'notified': False, 'silence_time': 600, 'last_action_time': self.receive_time, 'time_interval': 300, 'executed_times': 0, 'max_execution_times': 2},  # 订单是否已分配给写手
@@ -84,81 +86,12 @@ class CommandMessage:
             return None
 
     def is_history_message(self):
-        mdh = MessageDataHandler()
-        message = mdh.count_message_by_id(self.message_id)
-        if message > 0:
+        odh = OrderDataHandler()
+        count = odh.count_by_order_id(self.order_id)
+        if count > 0:
             return True
         else:
             return False
 
-    def save_to_db(self):
-        mdh = MessageDataHandler()
-        mdh.save_message(self)
-
     def __str__(self):
         return f"CommandMessage(command={self.command}, sender={self.sender}[{self.sender_type}], content={self.content.replace('\n', '')}, message_id={self.message_id}, chat={self.chat})"
-
-class MessageDataHandler:
-    def __init__(self, db_name='../db/haper.db'):
-        self.db_name = db_name
-        self.create_table()
-
-    def create_table(self):
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS receive_msgs (
-                    id           INTEGER       PRIMARY KEY AUTOINCREMENT,
-                    message_id   INTEGER,
-                    sender_id    VARCHAR (200),
-                    sender_type  VARCHAR (30),
-                    content      TEXT,
-                    receive_time INTEGER
-                );
-            ''')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_message_id ON receive_msgs (message_id)')
-
-    def save_message(self, message: CommandMessage):
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                INSERT INTO receive_msgs (message_id, sender_id, sender_type, content, receive_time)
-                VALUES (?,?,?,?,?)
-            ''', (message.message_id, message.sender, message.sender_type, message.content, int(datetime.now().timestamp())))
-
-    def count_message_by_id(self, message_id):
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                SELECT COUNT(*) FROM receive_msgs WHERE message_id =?
-            ''', (message_id,))
-            row = cursor.fetchone()
-            if row:
-                return row[0]
-            else:
-                return 0
-
-    def get_message_by_id(self, message_id):
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                SELECT * FROM receive_msgs WHERE message_id =?
-            ''', (message_id,))
-            row = cursor.fetchone()
-            if row:
-                # (self, command: int, sender, content, message_id, chat):
-                return CommandMessage(None, row[2], row[4], row[1], None)
-            else:
-                return None
-
-    def get_messages_by_sender(self, sender_id):
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                SELECT * FROM receive_msgs WHERE sender_id =?
-            ''', (sender_id,))
-            rows = cursor.fetchall()
-            messages = []
-            for row in rows:
-                return CommandMessage(None, row[2], row[4], row[1], None)
-            return messages

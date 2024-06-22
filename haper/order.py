@@ -313,6 +313,15 @@ class OrderDataHandler:
                 WHERE order_id = ?
             ''', (order.message_id, order.worker, order.wechat_id, order.info, json.dumps(order.command_message_data), order.create_time, order.work_time, order.finish_time, order.evaluation, int(order.status['customer_added']), int(order.status['worker_assigned']), int(order.status['work_group_created']), order.order_id))
 
+    def count_by_order_id(self, order_id):
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT COUNT(*) FROM orders 
+                WHERE order_id = ?
+            ''', (order_id,))
+            return cursor.fetchone()[0]
+
     def get_order_by_id(self, order_id, order):
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()

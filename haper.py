@@ -43,11 +43,6 @@ class WechatMessageListener:
                                 if command_message.is_history_message():
                                     Haperlog.logger.debug(f'---Ignore history message : {command_message}')
                                     continue
-                                try:
-                                    # 保存消息到数据库
-                                    command_message.save_to_db()
-                                except Exception as e:
-                                    Haperlog.logger.exception(f'---Error listening message: {e}, {e}')
 
                                 Haperlog.logger.debug(f'---Dispatching message : {command_message}')
                                 self.message_queue.put(command_message)
@@ -113,7 +108,6 @@ class CommandExecutor:
         command = command_message.command
         sender = command_message.sender
         sender_type = command_message.sender_type
-        message = command_message.content
         chat = command_message.chat
 
         if sender_type == '客服':
@@ -330,11 +324,11 @@ def system_producer():
 
 # t1 = threading.Thread(target=producer)
 t2 = threading.Thread(target=consumer)
-#t3 = threading.Thread(target=system_producer)
+t3 = threading.Thread(target=system_producer)
 
 # t1.start()
 t2.start()
-#t3.start()
+t3.start()
 
 if __name__ == '__main__':
     producer()
